@@ -410,147 +410,53 @@ startSessionBtn.removeEventListener('click', startSessionBtnHandler);
 startSessionBtn.addEventListener('click', endSessionHandler);
 });
 // Start scanner function
-
-// Add this function to check if jsQR is loaded and retry if needed
-function ensureJsQRLoaded() {
-  return new Promise((resolve, reject) => {
-    if (typeof jsQR === 'function') return resolve();
-
-    const script = document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js";
-    // Updated integrity hash for v1.4.0
-    script.integrity = "sha512-cv0gq9QJX3tIB6r2+JmI7uYlK5KZQwwNdrvRwnJZgdYwE3dRkLt03YVjTbwN6/Je3X2J5fQCiJp4k3QeAtAg==";
-    script.crossOrigin = "anonymous";
-    
-    script.onload = () => {
-      if (typeof jsQR === 'function') resolve();
-      else reject(new Error("jsQR loaded but not available"));
-    };
-    
-    script.onerror = () => {
-      reject(new Error("Failed to load jsQR library. Check internet connection."));
-    };
-
-    document.head.appendChild(script);
-  });
-}
-
-// Modified startScanner function to ensure jsQR is loaded
 async function startScanner() {
-  try {
-    // First, ensure jsQR is loaded
-    await ensureJsQRLoaded();
-    
-    const constraints = {
-      video: { 
-        facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
-    };
-    
-    videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = videoStream;
-    video.setAttribute("playsinline", true);
-    
-    // Wait for the video to load metadata
-    await new Promise((resolve) => {
-      video.onloadedmetadata = resolve;
-    });
-    
-    // Set up canvas with correct dimensions
-    canvasElement.height = video.videoHeight;
-    canvasElement.width = video.videoWidth;
-    
-    // Start playing the video
-    await video.play();
-    scanning = true;
-    scannerPlaceholder.style.display = 'none';
-    video.style.display = 'block';
-    
-    // Verify again that jsQR is available
-    if (typeof jsQR !== 'function') {
-      throw new Error("jsQR library not available after loading");
-    }
-    
-    console.log("Starting QR code scanning");
-    requestAnimationFrame(tick);
-    
-  } catch (error) {
-    console.error("Scanner initialization failed:", error);
-    alert(`Scanner Error: ${error.message}`);
-    if (error.message.includes("jsQR")) {
-      alert("Please check your internet connection or contact support.");
-    }
-  }
+try {
+const constraints = {
+video: { 
+facingMode: "environment",
+width: { ideal: 1280 },
+height: { ideal: 720 }
 }
-// Modified tick function with better error handling
+};
+videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+video.srcObject = videoStream;
+video.setAttribute("playsinline", true);
+video.play();
+scanning = true;
+scannerPlaceholder.style.display = 'none';
+video.style.display = 'block';
+requestAnimationFrame(tick);
+} catch (error) {
+console.error("Failed to access camera:", error);
+alert("Failed to access camera. Please ensure camera permissions are enabled.");
+}
+}
+// QR code scanning loop
 function tick() {
-  if (!scanning) return;
-  
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    try {
-      // Set canvas dimensions
-      canvasElement.height = video.videoHeight;
-      canvasElement.width = video.videoWidth;
-      
-      // Clear and draw new frame
-      canvas.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-      
-      // Get image data
-      const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-      
-      // Verify jsQR is available before calling
-      if (typeof jsQR !== 'function') {
-        console.error("jsQR function not available in tick");
-        requestAnimationFrame(tick);
-        return;
-      }
-      
-      // Process QR code
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert",
-      });
-      
-      if (code && code.data) {
-        console.log("QR Code detected:", code.data);
-        
-        // Check for duplicates
-        if (!lastScannedCodes.has(code.data)) {
-          // Manage recently scanned codes
-          lastScannedCodes.add(code.data);
-          setTimeout(() => {
-            lastScannedCodes.delete(code.data);
-          }, 3000);
-          
-          // Process the scanned code
-          processScannedCode(code.data);
-          
-          // Add visual feedback
-          if (code.location) {
-            canvas.beginPath();
-            canvas.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
-            canvas.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
-            canvas.lineTo(code.location.bottomRightCorner.x, code.location.bottomRightCorner.y);
-            canvas.lineTo(code.location.bottomLeftCorner.x, code.location.bottomLeftCorner.y);
-            canvas.lineTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
-            canvas.lineWidth = 4;
-            canvas.strokeStyle = "#FF3B58";
-            canvas.stroke();
-          }
-        }
-      }
-      
-    } catch (error) {
-      console.error("Error in QR processing:", error);
-    }
-  }
-  
-  // Continue scanning
-  if (scanning) {
-    requestAnimationFrame(tick);
-  }
+if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
+canvasElement.height = video.videoHeight;
+canvasElement.width = video.videoWidth;
+canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+const code = jsQR(imageData.data, imageData.width, imageData.height, {
+inversionAttempts: "dontInvert",
+});
+if (code && code.data) {
+// Check if this code was recently scanned (to prevent duplicates)
+if (!lastScannedCodes.has(code.data)) {
+// Add to recent scans set and set timeout to remove
+lastScannedCodes.add(code.data);
+setTimeout(() => {
+lastScannedCodes.delete(code.data);
+}, 3000); // Prevent duplicate scans for 3 seconds
+processScannedCode(code.data);
+}
+}
+requestAnimationFrame(tick);
+} else if (scanning) {
+requestAnimationFrame(tick);
+}
 }
 // Process scanned QR code
 function processScannedCode(data) {
