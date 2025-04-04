@@ -885,16 +885,16 @@ function exportSession(session) {
   
   const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
   
-  // Prepare data
+  // Prepare data with modified column headers
   const data = [
-    ['ID', 'Content', 'Location', 'Date', 'Time']
+    ['Number', 'Student ID', 'Location', 'Date', 'Time']
   ];
   
   session.scans.forEach(scan => {
     const scanDate = new Date(scan.time);
     data.push([
-      scan.id,
-      scan.content,
+      scan.id,                // Row number (previously ID)
+      scan.content,           // QR code content is now Student ID
       session.location,
       formatDate(scanDate),
       formatTime(scanDate)
@@ -926,14 +926,14 @@ function exportAllSessions() {
   // For each session
   sessions.forEach(session => {
     const data = [
-      ['ID', 'Content', 'Location', 'Date', 'Time']
+      ['Number', 'Student ID', 'Location', 'Date', 'Time']
     ];
     
     session.scans.forEach(scan => {
       const scanDate = new Date(scan.time);
       data.push([
-        scan.id,
-        scan.content,
+        scan.id,              // Row number (previously ID)
+        scan.content,         // QR code content is now Student ID
         session.location,
         formatDate(scanDate),
         formatTime(scanDate)
