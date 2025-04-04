@@ -1,0 +1,17 @@
+[
+  {
+    "id": "session_1743798639540",
+    "location": "Hfg",
+    "dateTime": "2025-04-04T20:30:39.540Z",
+    "formattedDateTime": "2025-04-04 22:30:39",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T20:30:44.170Z",
+        "formattedTime": "22:30:44"
+      }
+    ],
+    "inProgress": false
+  }
+]
