@@ -751,7 +751,7 @@ updateScanStatus('Waiting for camera...');
 // Continue scanning
 requestAnimationFrame(scanQRCode);
 }
-// Process scanned QR code - MODIFIED TO UPDATE HISTORY
+// Process scanned QR code 
 function processScannedCode(data) {
 // Additional validation to ensure we're not adding empty codes
 if (!data || data.trim() === '') {
