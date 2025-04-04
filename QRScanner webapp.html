@@ -776,7 +776,25 @@ exportAllBtn.addEventListener('click', () => {
     alert('No sessions to export');
     return;
   }
-  exportAllSessions();
+  
+  try {
+    // Add a delay to prevent rapid multiple clicks
+    exportAllBtn.disabled = true;
+    
+    // Execute the export
+    exportAllSessions();
+    
+    // Re-enable the button after 2 seconds
+    setTimeout(() => {
+      exportAllBtn.disabled = false;
+    }, 2000);
+    
+    console.log("Export all completed successfully");
+  } catch (error) {
+    console.error("Export failed:", error);
+    alert("Export failed: " + error.message);
+    exportAllBtn.disabled = false;
+  }
 });
 
 // Sort history sessions
@@ -923,6 +941,9 @@ function exportAllSessions() {
   const fileName = `QR_Scan_All_Sessions_${formatDateTimeForFile(new Date())}.xlsx`;
   const wb = XLSX.utils.book_new();
   
+  // Counter for unique sheet names
+  let sheetCounter = {};
+  
   // For each session
   sessions.forEach(session => {
     const data = [
@@ -932,8 +953,8 @@ function exportAllSessions() {
     session.scans.forEach(scan => {
       const scanDate = new Date(scan.time);
       data.push([
-        scan.id,              // Row number (previously ID)
-        scan.content,         // QR code content is now Student ID
+        scan.id,
+        scan.content,
         session.location,
         formatDate(scanDate),
         formatTime(scanDate)
@@ -942,13 +963,40 @@ function exportAllSessions() {
     
     if (data.length > 1) {
       const ws = XLSX.utils.aoa_to_sheet(data);
-      const sheetName = session.location.substring(0, 30).replace(/[^a-z0-9]/gi, '_');
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      
+      // Create unique sheet name
+      let baseSheetName = session.location.substring(0, 25).replace(/[^a-z0-9]/gi, '_');
+      if (baseSheetName.length === 0) baseSheetName = "Session";
+      
+      // Ensure uniqueness
+      if (sheetCounter[baseSheetName]) {
+        sheetCounter[baseSheetName]++;
+        baseSheetName = baseSheetName + "_" + sheetCounter[baseSheetName];
+      } else {
+        sheetCounter[baseSheetName] = 1;
+      }
+      
+      // Excel sheet names cannot exceed 31 characters
+      const sheetName = baseSheetName.substring(0, 31);
+      
+      try {
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      } catch (e) {
+        console.error("Error adding sheet:", e);
+        // If there's an error with this sheet, try with a generic name
+        XLSX.utils.book_append_sheet(wb, ws, "Session_" + Math.random().toString(36).substring(2, 7));
+      }
     }
   });
   
-  // Save file
-  XLSX.writeFile(wb, fileName);
+  try {
+    // Save file with error handling
+    XLSX.writeFile(wb, fileName);
+    console.log("File written successfully:", fileName);
+  } catch (e) {
+    console.error("Error writing file:", e);
+    alert("Error exporting file: " + e.message);
+  }
 }
 
 // Helper function to format date for display
