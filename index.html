@@ -553,165 +553,270 @@ alert(`Failed to access camera: ${error.message}. Please check camera permission
 }
 // Set up scanner UI elements
 function setupScannerUI() {
-// Remove any existing UI elements first
-const oldElements = document.querySelectorAll('.scanner-ui');
-oldElements.forEach(el => el.remove());
-// Add scan frame indicator
-const scanFrame = document.createElement('div');
-scanFrame.className = 'scanner-ui';
-scanFrame.id = 'scan-frame';
-scanFrame.style.position = 'absolute';
-scanFrame.style.top = '50%';
-scanFrame.style.left = '50%';
-scanFrame.style.transform = 'translate(-50%, -50%)';
-scanFrame.style.width = '200px';
-scanFrame.style.height = '200px';
-scanFrame.style.border = '2px solid #24325f';
-scanFrame.style.borderRadius = '10px';
-scanFrame.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
-scanFrame.style.zIndex = '99';
-document.querySelector('.scanner-container').appendChild(scanFrame);
-// Add status text
-const statusText = document.createElement('div');
-statusText.className = 'scanner-ui';
-statusText.id = 'scan-status';
-statusText.style.position = 'absolute';
-statusText.style.bottom = '10px';
-statusText.style.left = '50%';
-statusText.style.transform = 'translateX(-50%)';
-statusText.style.backgroundColor = 'rgba(0,0,0,0.7)';
-statusText.style.color = 'white';
-statusText.style.padding = '8px 16px';
-statusText.style.borderRadius = '20px';
-statusText.style.zIndex = '100';
-statusText.textContent = 'Starting camera...';
-document.querySelector('.scanner-container').appendChild(statusText);
-// Keep canvas in the DOM but make it invisible
-// This is crucial for QR detection to work
-canvasElement.className = 'scanner-ui';
-canvasElement.style.position = 'absolute';
-canvasElement.style.top = '0';
-canvasElement.style.left = '0';
-canvasElement.style.width = '100%';
-canvasElement.style.height = '100%';
-canvasElement.style.display = 'none'; // Hide but keep in DOM
-document.querySelector('.scanner-container').appendChild(canvasElement);
+    // Remove any existing UI elements first
+    const oldElements = document.querySelectorAll('.scanner-ui');
+    oldElements.forEach(el => el.remove());
+    
+    // Add scan frame indicator
+    const scanFrame = document.createElement('div');
+    scanFrame.className = 'scanner-ui';
+    scanFrame.id = 'scan-frame';
+    scanFrame.style.position = 'absolute';
+    scanFrame.style.top = '50%';
+    scanFrame.style.left = '50%';
+    scanFrame.style.transform = 'translate(-50%, -50%)';
+    scanFrame.style.width = '200px';
+    scanFrame.style.height = '200px';
+    scanFrame.style.border = '2px solid #24325f';
+    scanFrame.style.borderRadius = '10px';
+    scanFrame.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
+    scanFrame.style.zIndex = '99';
+    document.querySelector('.scanner-container').appendChild(scanFrame);
+    
+    // Add status text
+    const statusText = document.createElement('div');
+    statusText.className = 'scanner-ui';
+    statusText.id = 'scan-status';
+    statusText.style.position = 'absolute';
+    statusText.style.bottom = '10px';
+    statusText.style.left = '50%';
+    statusText.style.transform = 'translateX(-50%)';
+    statusText.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    statusText.style.color = 'white';
+    statusText.style.padding = '8px 16px';
+    statusText.style.borderRadius = '20px';
+    statusText.style.zIndex = '100';
+    statusText.textContent = 'Starting camera...';
+    document.querySelector('.scanner-container').appendChild(statusText);
+    
+    // Add scan log panel
+    const scanLogPanel = document.createElement('div');
+    scanLogPanel.className = 'scanner-ui';
+    scanLogPanel.id = 'scan-log';
+    scanLogPanel.style.position = 'absolute';
+    scanLogPanel.style.top = '10px';
+    scanLogPanel.style.right = '10px';
+    scanLogPanel.style.width = '250px';
+    scanLogPanel.style.maxHeight = '150px';
+    scanLogPanel.style.overflowY = 'auto';
+    scanLogPanel.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    scanLogPanel.style.color = 'white';
+    scanLogPanel.style.padding = '8px';
+    scanLogPanel.style.borderRadius = '8px';
+    scanLogPanel.style.fontSize = '14px';
+    scanLogPanel.style.zIndex = '100';
+    scanLogPanel.innerHTML = '<div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Scan Log</div>';
+    document.querySelector('.scanner-container').appendChild(scanLogPanel);
+    
+    // Keep canvas in the DOM but make it invisible
+    // This is crucial for QR detection to work
+    canvasElement.className = 'scanner-ui';
+    canvasElement.style.position = 'absolute';
+    canvasElement.style.top = '0';
+    canvasElement.style.left = '0';
+    canvasElement.style.width = '100%';
+    canvasElement.style.height = '100%';
+    canvasElement.style.display = 'none'; // Hide but keep in DOM
+    document.querySelector('.scanner-container').appendChild(canvasElement);
 }
-// Update scan status message
-function updateScanStatus(message) {
-const statusEl = document.getElementById('scan-status');
-if (statusEl) {
-statusEl.textContent = message;
-}
+// Add a log entry to the scan log
+function addScanLogEntry(message, type = 'info') {
+    const scanLog = document.getElementById('scan-log');
+    if (scanLog) {
+        const entry = document.createElement('div');
+        entry.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
+        entry.style.padding = '4px 0';
+        entry.style.fontSize = '12px';
+        
+        // Color code by type
+        if (type === 'success') {
+            entry.style.color = '#4caf50';
+        } else if (type === 'error') {
+            entry.style.color = '#f44336';
+        } else if (type === 'warning') {
+            entry.style.color = '#ff9800';
+        }
+        
+        // Add timestamp
+        const now = new Date();
+        const timestamp = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
+        
+        entry.innerHTML = `<small>${timestamp}</small> ${message}`;
+        scanLog.appendChild(entry);
+        
+        // Scroll to bottom
+        scanLog.scrollTop = scanLog.scrollHeight;
+        
+        // Limit entries to keep performance good
+        while (scanLog.children.length > 20) {
+            scanLog.removeChild(scanLog.children[1]); // Keep the header
+        }
+    }
 }
 // Highlight QR code when found
 function highlightQR(location) {
-const frame = document.getElementById('scan-frame');
-if (frame) {
-frame.style.borderColor = '#FF3B58';
-setTimeout(() => {
-frame.style.borderColor = '#24325f';
-}, 500);
+    const frame = document.getElementById('scan-frame');
+    if (frame) {
+        frame.style.borderColor = '#FF3B58';
+        setTimeout(() => {
+            frame.style.borderColor = '#24325f';
+        }, 500);
+    }
+    
+    // Add success log entry
+    addScanLogEntry('QR code successfully detected', 'success');
 }
+// Update scan status message
+function updateScanStatus(message) {
+    const statusEl = document.getElementById('scan-status');
+    if (statusEl) {
+        statusEl.textContent = message;
+        
+        // Add visual indication of status
+        if (message.includes('Successfully')) {
+            statusEl.style.backgroundColor = 'rgba(0, 128, 0, 0.8)';  // Green background for success
+            // Briefly show success then reset
+            setTimeout(() => {
+                statusEl.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            }, 2000);
+        } else if (message.includes('Error') || message.includes('failed')) {
+            statusEl.style.backgroundColor = 'rgba(220, 0, 0, 0.8)';  // Red background for errors
+        } else if (message.includes('Duplicate')) {
+            statusEl.style.backgroundColor = 'rgba(255, 165, 0, 0.8)';  // Orange for duplicates
+        } else {
+            statusEl.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';  // Default color
+        }
+    }
 }
 // Enhanced QR code scanning function with additional debugging
 function scanQRCode() {
-if (!scanning) return;
-if (video.readyState === video.HAVE_ENOUGH_DATA) {
-try {
-// Draw the video frame to the canvas
-canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-// Get image data from the canvas
-const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-// Check if we have valid image data
-if (imageData.data.length === 0 || imageData.width === 0 || imageData.height === 0) {
-console.error("Invalid image data");
-updateScanStatus('Error: Invalid image data');
-requestAnimationFrame(scanQRCode);
-return;
-}
-// Add debug information
-updateScanStatus(`Scanning: ${imageData.width}x${imageData.height}`);
-// Verify jsQR is available with additional logging
-if (typeof jsQR !== 'function') {
-console.error("jsQR is not available. Current value:", jsQR);
-updateScanStatus('QR scanner not loaded correctly');
-// Try to reload the library
-loadJsQR().catch(err => console.error("Failed to reload jsQR:", err));
-requestAnimationFrame(scanQRCode);
-return;
-}
-console.log("Attempting to decode QR with dimensions:", imageData.width, "x", imageData.height);
-// Process with jsQR with try-catch for better error reporting
-try {
-const code = jsQR(imageData.data, imageData.width, imageData.height, {
-inversionAttempts: "dontInvert"
-});
-if (code) {
-console.log("QR Code detected:", code.data);
-updateScanStatus(`Detected: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`);
-// Highlight the QR code
-highlightQR(code.location);
-// Check if this code was recently scanned
-if (!lastScannedCodes.has(code.data)) {
-// Add to recent scans set and set timeout to remove
-lastScannedCodes.add(code.data);
-setTimeout(() => {
-lastScannedCodes.delete(code.data);
-}, 3000); // Prevent duplicate scans for 3 seconds
-// Process the scanned code
-processScannedCode(code.data);
-// Play success sound
-playSuccessSound();
-}
-}
-} catch (qrError) {
-console.error("jsQR processing error:", qrError);
-updateScanStatus('QR processing error: ' + qrError.message);
-}
-} catch (error) {
-console.error("Error in scan process:", error);
-updateScanStatus('Error in scan process: ' + error.message);
-}
-} else {
-updateScanStatus('Waiting for camera...');
-}
-// Continue scanning
-requestAnimationFrame(scanQRCode);
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        try {
+            // Draw the video frame to the canvas
+            canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+            // Get image data from the canvas
+            const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+            // Check if we have valid image data
+            if (imageData.data.length === 0 || imageData.width === 0 || imageData.height === 0) {
+                console.error("Invalid image data");
+                updateScanStatus('Error: Invalid image data');
+                requestAnimationFrame(scanQRCode);
+                return;
+            }
+            
+            // Verify jsQR is available with additional logging
+            if (typeof jsQR !== 'function') {
+                console.error("jsQR is not available. Current value:", jsQR);
+                updateScanStatus('QR scanner not loaded correctly');
+                // Try to reload the library
+                loadJsQR().catch(err => console.error("Failed to reload jsQR:", err));
+                requestAnimationFrame(scanQRCode);
+                return;
+            }
+            
+            // Process with jsQR with try-catch for better error reporting
+            try {
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert"
+                });
+                
+                if (code && code.data) {
+                    // Make sure we have actual data before proceeding
+                    if (code.data.trim() === '') {
+                        // Empty QR code data, continue scanning
+                        updateScanStatus('Empty QR code detected. Please scan again.');
+                    } else {
+                        console.log("QR Code detected:", code.data);
+                        updateScanStatus(`✅ Successfully scanned: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`);
+                        
+                        // Highlight the QR code
+                        highlightQR(code.location);
+                        
+                        // Check if this code was recently scanned
+                        if (!lastScannedCodes.has(code.data)) {
+                            // Add to recent scans set and set timeout to remove
+                            lastScannedCodes.add(code.data);
+                            setTimeout(() => {
+                                lastScannedCodes.delete(code.data);
+                            }, 3000); // Prevent duplicate scans for 3 seconds
+                            
+                            // Process the scanned code
+                            processScannedCode(code.data);
+                            
+                            // Play success sound
+                            playSuccessSound();
+                        } else {
+                            // Duplicate scan
+                            updateScanStatus(`Duplicate scan: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`);
+                        }
+                    }
+                } else {
+                    // No QR code found in this frame
+                    updateScanStatus('Scanning... Position QR code in the frame');
+                }
+            } catch (qrError) {
+                console.error("jsQR processing error:", qrError);
+                updateScanStatus('QR processing error: ' + qrError.message);
+            }
+        } catch (error) {
+            console.error("Error in scan process:", error);
+            updateScanStatus('Error in scan process: ' + error.message);
+        }
+    } else {
+        updateScanStatus('Waiting for camera...');
+    }
+    
+    // Continue scanning
+    requestAnimationFrame(scanQRCode);
 }
 // Process scanned QR code - MODIFIED TO UPDATE HISTORY
 function processScannedCode(data) {
-const now = new Date();
-const scan = {
-id: activeSession.scans.length + 1,
-content: data,
-time: now.toISOString(),
-formattedTime: formatTime(now)
-};
-// Add to active session
-activeSession.scans.push(scan);
-// Update UI
-if (activeSession.scans.length === 1) {
-noScansMessage.style.display = 'none';
-resultTable.style.display = 'table';
-}
-const row = document.createElement('tr');
-row.innerHTML = `
-<td>${scan.id}</td>
-<td>${escapeHtml(scan.content)}</td>
-<td>${scan.formattedTime}</td>
-`;
-resultBody.appendChild(row);
-// Find the session in the sessions array and update it
-const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
-if (sessionIndex !== -1) {
-sessions[sessionIndex] = {...activeSession};
-}
-// Save both active session and completed sessions
-saveActiveSession();
-saveSessionsToStorage();
-// No need to update history view here as it's updated in the auto-save interval
-// This avoids too many UI updates which could slow down the app
+    // Additional validation to ensure we're not adding empty codes
+    if (!data || data.trim() === '') {
+        console.error("Attempted to process empty QR code data");
+        updateScanStatus('Error: Empty QR code data');
+        addScanLogEntry('Empty QR code data - not saved', 'error');
+        return;
+    }
+    
+    const now = new Date();
+    const scan = {
+        id: activeSession.scans.length + 1,
+        content: data,
+        time: now.toISOString(),
+        formattedTime: formatTime(now)
+    };
+    
+    // Add to active session
+    activeSession.scans.push(scan);
+    
+    // Update UI
+    if (activeSession.scans.length === 1) {
+        noScansMessage.style.display = 'none';
+        resultTable.style.display = 'table';
+    }
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>${scan.id}</td>
+        <td>${escapeHtml(scan.content)}</td>
+        <td>${scan.formattedTime}</td>
+    `;
+    resultBody.appendChild(row);
+    
+    // Find the session in the sessions array and update it
+    const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+    if (sessionIndex !== -1) {
+        sessions[sessionIndex] = {...activeSession};
+    }
+    
+    // Save both active session and completed sessions
+    saveActiveSession();
+    saveSessionsToStorage();
+    
+    // Add to scan log
+    addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}`, 'success');
 }
 // End current scanning session
 function endSessionHandler() {
