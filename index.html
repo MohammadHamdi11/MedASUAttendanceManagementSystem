@@ -851,37 +851,25 @@ console.log('ServiceWorker registration failed: ', err);
 }
 //======== UI NAVIGATION & EVENT HANDLERS ========//
 tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    const tabId = tab.getAttribute('data-tab');
-    tabs.forEach(t => t.classList.remove('active'));
-    tabContents.forEach(tc => tc.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(tabId).classList.add('active');
-    
-    // Update connection status and token status when backup tab is selected
-    if (tabId === 'backup') {
-      updateConnectionStatus();
-      updateLastBackupTimeDisplay();
-      
-      // Check if token is initialized
-      const token = loadGitHubToken();
-      if (token) {
-        githubTokenInput.value = token;
-      } else {
-        // Try to initialize from encrypted source
-        initializeGitHubToken();
-      }
-    }
-  });
+tab.addEventListener('click', () => {
+const tabId = tab.getAttribute('data-tab');
+tabs.forEach(t => t.classList.remove('active'));
+tabContents.forEach(tc => tc.classList.remove('active'));
+tab.classList.add('active');
+document.getElementById(tabId).classList.add('active');
+// Update connection status when backup tab is selected
+if (tabId === 'backup') {
+updateConnectionStatus();
+updateLastBackupTimeDisplay();
+}
 });
-
+});
 // GitHub backup event listeners
 if (backupBtn) {
-  backupBtn.addEventListener('click', () => backupToGitHub(false));
+backupBtn.addEventListener('click', () => backupToGitHub(false));
 }
-
 if (saveTokenBtn) {
-  saveTokenBtn.addEventListener('click', saveGitHubToken);
+saveTokenBtn.addEventListener('click', saveGitHubToken);
 }
 // Start Session Button
 startSessionBtn.addEventListener('click', () => {
