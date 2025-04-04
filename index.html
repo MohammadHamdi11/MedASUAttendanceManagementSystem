@@ -323,7 +323,6 @@ const detailsBody = document.getElementById('detailsBody');
 const exportSessionBtn = document.getElementById('exportSessionBtn');
 const closeDetailsBtn = document.getElementById('closeDetailsBtn');
 const sortBy = document.getElementById('sortBy');
-
 // Application State
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
@@ -335,453 +334,411 @@ let activeSessionId = null;
 let lastScannedCodes = new Set(); // For avoiding duplicate scans in quick succession
 let jsQRLoaded = false;
 let autoSaveInterval = null;
-
 // Constants for auto-save functionality
 const AUTO_SAVE_DELAY = 3000; // 3 seconds
 const ACTIVE_SESSION_STORAGE_KEY = 'qrScannerActiveSession';
 const COMPLETED_SESSIONS_STORAGE_KEY = 'qrScannerSessions';
-
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("DOM fully loaded");
-    loadSessionsFromStorage();
-    checkForRecoverableSession();
-    updateHistoryView();
-    
-    // Check if jsQR is already defined (from the script tag in HTML)
-    if (typeof jsQR === 'function') {
-        console.log("jsQR is already loaded from local file");
-        jsQRLoaded = true;
-    } else {
-        console.log("jsQR not detected, will attempt to load");
-        loadJsQR()
-            .then(() => console.log("jsQR library loaded and ready"))
-            .catch(error => {
-                console.error("Error loading jsQR:", error);
-                alert("Failed to load QR code scanning library. Please check your files and try again.");
-            });
-    }
-    
-    // Add beforeunload event listener to prevent accidental closing during active session
-    window.addEventListener('beforeunload', handleBeforeUnload);
+console.log("DOM fully loaded");
+loadSessionsFromStorage();
+checkForRecoverableSession();
+updateHistoryView();
+// Check if jsQR is already defined (from the script tag in HTML)
+if (typeof jsQR === 'function') {
+console.log("jsQR is already loaded from local file");
+jsQRLoaded = true;
+} else {
+console.log("jsQR not detected, will attempt to load");
+loadJsQR()
+.then(() => console.log("jsQR library loaded and ready"))
+.catch(error => {
+console.error("Error loading jsQR:", error);
+alert("Failed to load QR code scanning library. Please check your files and try again.");
 });
-
+}
+// Add beforeunload event listener to prevent accidental closing during active session
+window.addEventListener('beforeunload', handleBeforeUnload);
+});
 // Modified function to load jsQR from local file
 function loadJsQR() {
-    return new Promise((resolve, reject) => {
-        // Check if jsQR is already loaded
-        if (typeof jsQR === 'function') {
-            jsQRLoaded = true;
-            resolve(true);
-            return;
-        }
-        
-        // Create a new script element to load the local file
-        const script = document.createElement('script');
-        script.src = 'jsQR.min.js'; // Local file path
-        
-        // Set event handlers
-        script.onload = () => {
-            console.log("jsQR loaded successfully from local file");
-            jsQRLoaded = true;
-            resolve(true);
-        };
-        
-        script.onerror = (error) => {
-            console.error("Failed to load local jsQR:", error);
-            reject(error);
-        };
-        
-        // Add the script to the document
-        document.head.appendChild(script);
-    });
+return new Promise((resolve, reject) => {
+// Check if jsQR is already loaded
+if (typeof jsQR === 'function') {
+jsQRLoaded = true;
+resolve(true);
+return;
 }
-
+// Create a new script element to load the local file
+const script = document.createElement('script');
+script.src = 'jsQR.min.js'; // Local file path
+// Set event handlers
+script.onload = () => {
+console.log("jsQR loaded successfully from local file");
+jsQRLoaded = true;
+resolve(true);
+};
+script.onerror = (error) => {
+console.error("Failed to load local jsQR:", error);
+reject(error);
+};
+// Add the script to the document
+document.head.appendChild(script);
+});
+}
 // Register Service Worker for PWA functionality
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-            .then(registration => {
-                console.log('ServiceWorker registration successful with scope: ', registration.scope);
-            })
-            .catch(err => {
-                console.log('ServiceWorker registration failed: ', err);
-            });
-    });
+window.addEventListener('load', () => {
+navigator.serviceWorker.register('sw.js')
+.then(registration => {
+console.log('ServiceWorker registration successful with scope: ', registration.scope);
+})
+.catch(err => {
+console.log('ServiceWorker registration failed: ', err);
+});
+});
 }
-
 // Tab Navigation
 tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        const tabId = tab.getAttribute('data-tab');
-        tabs.forEach(t => t.classList.remove('active'));
-        tabContents.forEach(tc => tc.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(tabId).classList.add('active');
-    });
+tab.addEventListener('click', () => {
+const tabId = tab.getAttribute('data-tab');
+tabs.forEach(t => t.classList.remove('active'));
+tabContents.forEach(tc => tc.classList.remove('active'));
+tab.classList.add('active');
+document.getElementById(tabId).classList.add('active');
 });
-
+});
 // Start Session Button
 startSessionBtn.addEventListener('click', () => {
-    // Before showing the modal, verify if jsQR is loaded
-    if (!jsQRLoaded) {
-        loadJsQR()
-            .then(() => {
-                sessionModal.style.display = 'block';
-                locationInput.focus();
-            })
-            .catch(() => {
-                alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
-            });
-    } else {
-        sessionModal.style.display = 'block';
-        locationInput.focus();
-    }
+// Before showing the modal, verify if jsQR is loaded
+if (!jsQRLoaded) {
+loadJsQR()
+.then(() => {
+sessionModal.style.display = 'block';
+locationInput.focus();
+})
+.catch(() => {
+alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
 });
-
+} else {
+sessionModal.style.display = 'block';
+locationInput.focus();
+}
+});
 // Close Modal
 closeModalBtn.addEventListener('click', () => {
-    sessionModal.style.display = 'none';
+sessionModal.style.display = 'none';
 });
-
 // Start new scanning session
 confirmSessionBtn.addEventListener('click', () => {
-    const location = locationInput.value.trim();
-    if (!location) {
-        alert('Please enter a location');
-        return;
-    }
-    
-    // Hide modal
-    sessionModal.style.display = 'none';
-    
-    // Create new session
-    const now = new Date();
-    const sessionId = `session_${now.getTime()}`;
-    const formattedDateTime = formatDateTime(now);
-    
-    activeSession = {
-        id: sessionId,
-        location: location,
-        dateTime: now.toISOString(),
-        formattedDateTime: formattedDateTime,
-        scans: []
-    };
-    
-    // Update UI
-    currentLocation.textContent = location;
-    currentDateTime.textContent = formattedDateTime;
-    sessionInfo.style.display = 'block';
-    
-    // Start camera
-    startCamera();
-    
-    // Clear previous results
-    resultBody.innerHTML = '';
-    resultTable.style.display = 'none';
-    noScansMessage.style.display = 'block';
-    
-    // Start auto-save interval
-    startAutoSave();
-    
-    // Save the active session immediately
-    saveActiveSession();
-    
-    // Update button
-    startSessionBtn.textContent = 'End Session';
-    startSessionBtn.removeEventListener('click', startSessionBtnHandler);
-    startSessionBtn.addEventListener('click', endSessionHandler);
+const location = locationInput.value.trim();
+if (!location) {
+alert('Please enter a location');
+return;
+}
+// Hide modal
+sessionModal.style.display = 'none';
+// Create new session
+const now = new Date();
+const sessionId = `session_${now.getTime()}`;
+const formattedDateTime = formatDateTime(now);
+activeSession = {
+id: sessionId,
+location: location,
+dateTime: now.toISOString(),
+formattedDateTime: formattedDateTime,
+scans: []
+};
+// Update UI
+currentLocation.textContent = location;
+currentDateTime.textContent = formattedDateTime;
+sessionInfo.style.display = 'block';
+// Start camera
+startCamera();
+// Clear previous results
+resultBody.innerHTML = '';
+resultTable.style.display = 'none';
+noScansMessage.style.display = 'block';
+// Start auto-save interval
+startAutoSave();
+// Save the active session immediately
+saveActiveSession();
+// Update button
+startSessionBtn.textContent = 'End Session';
+startSessionBtn.removeEventListener('click', startSessionBtnHandler);
+startSessionBtn.addEventListener('click', endSessionHandler);
 });
-
 // Start auto-save interval
 function startAutoSave() {
-    // Clear any existing interval
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-    }
-    
-    // Set new interval
-    autoSaveInterval = setInterval(() => {
-        if (activeSession) {
-            console.log("Auto-saving active session...");
-            saveActiveSession();
-        }
-    }, AUTO_SAVE_DELAY);
+// Clear any existing interval
+if (autoSaveInterval) {
+clearInterval(autoSaveInterval);
 }
-
+// Set new interval
+autoSaveInterval = setInterval(() => {
+if (activeSession) {
+console.log("Auto-saving active session...");
+saveActiveSession();
+}
+}, AUTO_SAVE_DELAY);
+}
 // Stop auto-save interval
 function stopAutoSave() {
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-        autoSaveInterval = null;
-    }
+if (autoSaveInterval) {
+clearInterval(autoSaveInterval);
+autoSaveInterval = null;
 }
-
+}
 // Improved camera initialization function
 async function startCamera() {
-    try {
-        // Create scanner UI elements
-        setupScannerUI();
-        
-        // Try to get camera access
-        const constraints = {
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
-        };
-        
-        console.log("Requesting camera access with constraints:", constraints);
-        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-        console.log("Camera access granted:", videoStream);
-        
-        // Set up video element
-        video.srcObject = videoStream;
-        video.setAttribute("playsinline", true);
-        video.onloadedmetadata = () => {
-            console.log(`Video ready: ${video.videoWidth}x${video.videoHeight}`);
-            
-            // Set canvas dimensions to match video
-            canvasElement.width = video.videoWidth;
-            canvasElement.height = video.videoHeight;
-            
-            // Start video playback
-            video.play()
-                .then(() => {
-                    console.log("Video playback started");
-                    scannerPlaceholder.style.display = 'none';
-                    video.style.display = 'block';
-                    
-                    // Start scanning
-                    scanning = true;
-                    requestAnimationFrame(scanQRCode);
-                    
-                    // Show scanning indicator
-                    updateScanStatus('Camera active - looking for QR codes');
-                })
-                .catch(error => {
-                    console.error("Video playback failed:", error);
-                    alert("Failed to start video playback. Please try again.");
-                });
-        };
-    } catch (error) {
-        console.error("Camera access error:", error);
-        alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
-    }
+try {
+// Create scanner UI elements
+setupScannerUI();
+// Try to get camera access
+const constraints = {
+video: {
+facingMode: 'environment',
+width: { ideal: 1280 },
+height: { ideal: 720 }
 }
-
+};
+console.log("Requesting camera access with constraints:", constraints);
+videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+console.log("Camera access granted:", videoStream);
+// Set up video element
+video.srcObject = videoStream;
+video.setAttribute("playsinline", true);
+video.onloadedmetadata = () => {
+console.log(`Video ready: ${video.videoWidth}x${video.videoHeight}`);
+// Set canvas dimensions to match video
+canvasElement.width = video.videoWidth;
+canvasElement.height = video.videoHeight;
+// Start video playback
+video.play()
+.then(() => {
+console.log("Video playback started");
+scannerPlaceholder.style.display = 'none';
+video.style.display = 'block';
+// Start scanning
+scanning = true;
+requestAnimationFrame(scanQRCode);
+// Show scanning indicator
+updateScanStatus('Camera active - looking for QR codes');
+})
+.catch(error => {
+console.error("Video playback failed:", error);
+alert("Failed to start video playback. Please try again.");
+});
+};
+} catch (error) {
+console.error("Camera access error:", error);
+alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
+}
+}
 // Set up scanner UI elements
 function setupScannerUI() {
-    // Remove any existing UI elements first
-    const oldElements = document.querySelectorAll('.scanner-ui');
-    oldElements.forEach(el => el.remove());
-    
-    // Add scan frame indicator
-    const scanFrame = document.createElement('div');
-    scanFrame.className = 'scanner-ui';
-    scanFrame.id = 'scan-frame';
-    scanFrame.style.position = 'absolute';
-    scanFrame.style.top = '50%';
-    scanFrame.style.left = '50%';
-    scanFrame.style.transform = 'translate(-50%, -50%)';
-    scanFrame.style.width = '200px';
-    scanFrame.style.height = '200px';
-    scanFrame.style.border = '2px solid #24325f';
-    scanFrame.style.borderRadius = '10px';
-    scanFrame.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
-    scanFrame.style.zIndex = '99';
-    document.querySelector('.scanner-container').appendChild(scanFrame);
-    
-    // Add status text
-    const statusText = document.createElement('div');
-    statusText.className = 'scanner-ui';
-    statusText.id = 'scan-status';
-    statusText.style.position = 'absolute';
-    statusText.style.bottom = '10px';
-    statusText.style.left = '50%';
-    statusText.style.transform = 'translateX(-50%)';
-    statusText.style.backgroundColor = 'rgba(0,0,0,0.7)';
-    statusText.style.color = 'white';
-    statusText.style.padding = '8px 16px';
-    statusText.style.borderRadius = '20px';
-    statusText.style.zIndex = '100';
-    statusText.textContent = 'Starting camera...';
-    document.querySelector('.scanner-container').appendChild(statusText);
-    
-    // Keep canvas in the DOM but make it invisible
-    // This is crucial for QR detection to work
-    canvasElement.className = 'scanner-ui';
-    canvasElement.style.position = 'absolute';
-    canvasElement.style.top = '0';
-    canvasElement.style.left = '0';
-    canvasElement.style.width = '100%';
-    canvasElement.style.height = '100%';
-    canvasElement.style.display = 'none'; // Hide but keep in DOM
-    document.querySelector('.scanner-container').appendChild(canvasElement);
+// Remove any existing UI elements first
+const oldElements = document.querySelectorAll('.scanner-ui');
+oldElements.forEach(el => el.remove());
+// Add scan frame indicator
+const scanFrame = document.createElement('div');
+scanFrame.className = 'scanner-ui';
+scanFrame.id = 'scan-frame';
+scanFrame.style.position = 'absolute';
+scanFrame.style.top = '50%';
+scanFrame.style.left = '50%';
+scanFrame.style.transform = 'translate(-50%, -50%)';
+scanFrame.style.width = '200px';
+scanFrame.style.height = '200px';
+scanFrame.style.border = '2px solid #24325f';
+scanFrame.style.borderRadius = '10px';
+scanFrame.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
+scanFrame.style.zIndex = '99';
+document.querySelector('.scanner-container').appendChild(scanFrame);
+// Add status text
+const statusText = document.createElement('div');
+statusText.className = 'scanner-ui';
+statusText.id = 'scan-status';
+statusText.style.position = 'absolute';
+statusText.style.bottom = '10px';
+statusText.style.left = '50%';
+statusText.style.transform = 'translateX(-50%)';
+statusText.style.backgroundColor = 'rgba(0,0,0,0.7)';
+statusText.style.color = 'white';
+statusText.style.padding = '8px 16px';
+statusText.style.borderRadius = '20px';
+statusText.style.zIndex = '100';
+statusText.textContent = 'Starting camera...';
+document.querySelector('.scanner-container').appendChild(statusText);
+// Keep canvas in the DOM but make it invisible
+// This is crucial for QR detection to work
+canvasElement.className = 'scanner-ui';
+canvasElement.style.position = 'absolute';
+canvasElement.style.top = '0';
+canvasElement.style.left = '0';
+canvasElement.style.width = '100%';
+canvasElement.style.height = '100%';
+canvasElement.style.display = 'none'; // Hide but keep in DOM
+document.querySelector('.scanner-container').appendChild(canvasElement);
 }
-
 // Update scan status message
 function updateScanStatus(message) {
-    const statusEl = document.getElementById('scan-status');
-    if (statusEl) {
-        statusEl.textContent = message;
-    }
+const statusEl = document.getElementById('scan-status');
+if (statusEl) {
+statusEl.textContent = message;
 }
-
+}
 // Highlight QR code when found
 function highlightQR(location) {
-    const frame = document.getElementById('scan-frame');
-    if (frame) {
-        frame.style.borderColor = '#FF3B58';
-        setTimeout(() => {
-            frame.style.borderColor = '#24325f';
-        }, 500);
-    }
+const frame = document.getElementById('scan-frame');
+if (frame) {
+frame.style.borderColor = '#FF3B58';
+setTimeout(() => {
+frame.style.borderColor = '#24325f';
+}, 500);
 }
-
+}
 // Enhanced QR code scanning function with additional debugging
 function scanQRCode() {
-    if (!scanning) return;
-    
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        try {
-            // Draw the video frame to the canvas
-            canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-            
-            // Get image data from the canvas
-            const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-            
-            // Check if we have valid image data
-            if (imageData.data.length === 0 || imageData.width === 0 || imageData.height === 0) {
-                console.error("Invalid image data");
-                updateScanStatus('Error: Invalid image data');
-                requestAnimationFrame(scanQRCode);
-                return;
-            }
-            
-            // Add debug information
-            updateScanStatus(`Scanning: ${imageData.width}x${imageData.height}`);
-            
-            // Verify jsQR is available with additional logging
-            if (typeof jsQR !== 'function') {
-                console.error("jsQR is not available. Current value:", jsQR);
-                updateScanStatus('QR scanner not loaded correctly');
-                // Try to reload the library
-                loadJsQR().catch(err => console.error("Failed to reload jsQR:", err));
-                requestAnimationFrame(scanQRCode);
-                return;
-            }
-            
-            console.log("Attempting to decode QR with dimensions:", imageData.width, "x", imageData.height);
-            
-            // Process with jsQR with try-catch for better error reporting
-            try {
-                const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "dontInvert"
-                });
-                
-                if (code) {
-                    console.log("QR Code detected:", code.data);
-                    updateScanStatus(`Detected: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`);
-                    
-                    // Highlight the QR code
-                    highlightQR(code.location);
-                    
-                    // Check if this code was recently scanned
-                    if (!lastScannedCodes.has(code.data)) {
-                        // Add to recent scans set and set timeout to remove
-                        lastScannedCodes.add(code.data);
-                        setTimeout(() => {
-                            lastScannedCodes.delete(code.data);
-                        }, 3000); // Prevent duplicate scans for 3 seconds
-                        
-                        // Process the scanned code
-                        processScannedCode(code.data);
-                        
-                        // Play success sound
-                        playSuccessSound();
-                    }
-                }
-            } catch (qrError) {
-                console.error("jsQR processing error:", qrError);
-                updateScanStatus('QR processing error: ' + qrError.message);
-            }
-        } catch (error) {
-            console.error("Error in scan process:", error);
-            updateScanStatus('Error in scan process: ' + error.message);
-        }
-    } else {
-        updateScanStatus('Waiting for camera...');
-    }
-    
-    // Continue scanning
-    requestAnimationFrame(scanQRCode);
+if (!scanning) return;
+if (video.readyState === video.HAVE_ENOUGH_DATA) {
+try {
+// Draw the video frame to the canvas
+canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+// Get image data from the canvas
+const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+// Check if we have valid image data
+if (imageData.data.length === 0 || imageData.width === 0 || imageData.height === 0) {
+console.error("Invalid image data");
+updateScanStatus('Error: Invalid image data');
+requestAnimationFrame(scanQRCode);
+return;
 }
-
+// Add debug information
+updateScanStatus(`Scanning: ${imageData.width}x${imageData.height}`);
+// Verify jsQR is available with additional logging
+if (typeof jsQR !== 'function') {
+console.error("jsQR is not available. Current value:", jsQR);
+updateScanStatus('QR scanner not loaded correctly');
+// Try to reload the library
+loadJsQR().catch(err => console.error("Failed to reload jsQR:", err));
+requestAnimationFrame(scanQRCode);
+return;
+}
+console.log("Attempting to decode QR with dimensions:", imageData.width, "x", imageData.height);
+// Process with jsQR with try-catch for better error reporting
+try {
+const code = jsQR(imageData.data, imageData.width, imageData.height, {
+inversionAttempts: "dontInvert"
+});
+if (code) {
+console.log("QR Code detected:", code.data);
+updateScanStatus(`Detected: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`);
+// Highlight the QR code
+highlightQR(code.location);
+// Check if this code was recently scanned
+if (!lastScannedCodes.has(code.data)) {
+// Add to recent scans set and set timeout to remove
+lastScannedCodes.add(code.data);
+setTimeout(() => {
+lastScannedCodes.delete(code.data);
+}, 3000); // Prevent duplicate scans for 3 seconds
+// Process the scanned code
+processScannedCode(code.data);
+// Play success sound
+playSuccessSound();
+}
+}
+} catch (qrError) {
+console.error("jsQR processing error:", qrError);
+updateScanStatus('QR processing error: ' + qrError.message);
+}
+} catch (error) {
+console.error("Error in scan process:", error);
+updateScanStatus('Error in scan process: ' + error.message);
+}
+} else {
+updateScanStatus('Waiting for camera...');
+}
+// Continue scanning
+requestAnimationFrame(scanQRCode);
+}
 // Process scanned QR code
 function processScannedCode(data) {
-    const now = new Date();
-    const scan = {
-        id: activeSession.scans.length + 1,
-        content: data,
-        time: now.toISOString(),
-        formattedTime: formatTime(now)
-    };
-    
-    activeSession.scans.push(scan);
-    
-    // Update UI
-    if (activeSession.scans.length === 1) {
-        noScansMessage.style.display = 'none';
-        resultTable.style.display = 'table';
-    }
-    
-    const row = document.createElement('tr');
-    row.innerHTML = `
-        <td>${scan.id}</td>
-        <td>${escapeHtml(scan.content)}</td>
-        <td>${scan.formattedTime}</td>
-    `;
-    resultBody.appendChild(row);
-    
-    // Save session after each scan
-    saveActiveSession();
+const now = new Date();
+const scan = {
+id: activeSession.scans.length + 1,
+content: data,
+time: now.toISOString(),
+formattedTime: formatTime(now)
+};
+activeSession.scans.push(scan);
+// Update UI
+if (activeSession.scans.length === 1) {
+noScansMessage.style.display = 'none';
+resultTable.style.display = 'table';
 }
-
+const row = document.createElement('tr');
+row.innerHTML = `
+<td>${scan.id}</td>
+<td>${escapeHtml(scan.content)}</td>
+<td>${scan.formattedTime}</td>
+`;
+resultBody.appendChild(row);
+// Save session after each scan
+saveActiveSession();
+}
 // End current scanning session
 function endSessionHandler() {
     if (scanning) {
         scanning = false;
-        
         // Stop auto-save
         stopAutoSave();
-        
         // Stop camera
         if (videoStream) {
             videoStream.getTracks().forEach(track => track.stop());
             videoStream = null;
         }
-        
         // Update UI
         video.style.display = 'none';
         scannerPlaceholder.style.display = 'block';
-        
         // Clean up UI elements
         const scannerUI = document.querySelectorAll('.scanner-ui');
         scannerUI.forEach(el => el.remove());
         
+        // Store the session to be exported
+        const sessionToExport = {...activeSession};
+        
         // Move active session to completed sessions
         sessions.push(activeSession);
         saveSessionsToStorage();
-        
         // Clear the active session storage
         clearActiveSession();
-        
         updateHistoryView();
         
-        // Auto-export this session
-        exportSession(activeSession);
+        // Auto-export this session with better error handling
+        try {
+            if (sessionToExport && sessionToExport.scans && sessionToExport.scans.length > 0) {
+                console.log("Auto-exporting session:", sessionToExport.id);
+                exportSession(sessionToExport);
+                console.log("Session auto-exported successfully");
+            }
+        } catch (error) {
+            console.error("Auto-export failed:", error);
+            // Show non-blocking notification instead of alert
+            const notification = document.createElement('div');
+            notification.style.position = 'fixed';
+            notification.style.bottom = '20px';
+            notification.style.right = '20px';
+            notification.style.backgroundColor = '#ff3b58';
+            notification.style.color = 'white';
+            notification.style.padding = '10px 20px';
+            notification.style.borderRadius = '5px';
+            notification.style.zIndex = '1000';
+            notification.textContent = 'Auto-export failed. You can export manually from history.';
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 5000);
+        }
         
         // Reset UI
         sessionInfo.style.display = 'none';
@@ -793,407 +750,350 @@ function endSessionHandler() {
         alert('Session completed and exported successfully!');
     }
 }
-
 // Handler for start session button
 function startSessionBtnHandler() {
-    // Check if jsQR is loaded
-    if (!jsQRLoaded) {
-        loadJsQR()
-            .then(() => {
-                sessionModal.style.display = 'block';
-                locationInput.focus();
-            })
-            .catch(() => {
-                alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
-            });
-    } else {
-        sessionModal.style.display = 'block';
-        locationInput.focus();
-    }
+// Check if jsQR is loaded
+if (!jsQRLoaded) {
+loadJsQR()
+.then(() => {
+sessionModal.style.display = 'block';
+locationInput.focus();
+})
+.catch(() => {
+alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
+});
+} else {
+sessionModal.style.display = 'block';
+locationInput.focus();
 }
-
+}
 // Export all history to Excel
 exportAllBtn.addEventListener('click', () => {
-    if (sessions.length === 0) {
-        alert('No sessions to export');
-        return;
-    }
-    
-    try {
-        // Add a delay to prevent rapid multiple clicks
-        exportAllBtn.disabled = true;
-        
-        // Execute the export
-        exportAllSessions();
-        
-        // Re-enable the button after 2 seconds
-        setTimeout(() => {
-            exportAllBtn.disabled = false;
-        }, 2000);
-        
-        console.log("Export all completed successfully");
-    } catch (error) {
-        console.error("Export failed:", error);
-        alert("Export failed: " + error.message);
-        exportAllBtn.disabled = false;
-    }
+if (sessions.length === 0) {
+alert('No sessions to export');
+return;
+}
+try {
+// Add a delay to prevent rapid multiple clicks
+exportAllBtn.disabled = true;
+// Execute the export
+exportAllSessions();
+// Re-enable the button after 2 seconds
+setTimeout(() => {
+exportAllBtn.disabled = false;
+}, 2000);
+console.log("Export all completed successfully");
+} catch (error) {
+console.error("Export failed:", error);
+alert("Export failed: " + error.message);
+exportAllBtn.disabled = false;
+}
 });
-
 // Sort history sessions
 sortBy.addEventListener('change', updateHistoryView);
-
 // Export single session
 exportSessionBtn.addEventListener('click', () => {
-    if (!activeSessionId) return;
-    
-    const session = sessions.find(s => s.id === activeSessionId);
-    if (session) {
-        exportSession(session);
-    }
+if (!activeSessionId) return;
+const session = sessions.find(s => s.id === activeSessionId);
+if (session) {
+exportSession(session);
+}
 });
-
 // Close session details
 closeDetailsBtn.addEventListener('click', () => {
-    sessionDetails.style.display = 'none';
+sessionDetails.style.display = 'none';
 });
-
 // Save active session to local storage
 function saveActiveSession() {
-    if (activeSession) {
-        try {
-            localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, JSON.stringify(activeSession));
-            console.log("Active session saved", activeSession.id, activeSession.scans.length, "scans");
-        } catch (error) {
-            console.error("Error saving active session:", error);
-        }
-    }
+if (activeSession) {
+try {
+localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, JSON.stringify(activeSession));
+console.log("Active session saved", activeSession.id, activeSession.scans.length, "scans");
+} catch (error) {
+console.error("Error saving active session:", error);
 }
-
+}
+}
 // Clear active session from local storage
 function clearActiveSession() {
-    try {
-        localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
-        activeSession = null;
-    } catch (error) {
-        console.error("Error clearing active session:", error);
-    }
+try {
+localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+activeSession = null;
+} catch (error) {
+console.error("Error clearing active session:", error);
 }
-
+}
 // Check if there's a recoverable session
 function checkForRecoverableSession() {
-    try {
-        const savedActiveSession = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
-        if (savedActiveSession) {
-            const parsedSession = JSON.parse(savedActiveSession);
-            if (parsedSession && parsedSession.id && parsedSession.scans && parsedSession.scans.length > 0) {
-                const result = confirm(`Found an incomplete scanning session at ${parsedSession.location} with ${parsedSession.scans.length} scans. Would you like to recover it?`);
-                
-                if (result) {
-                    // Recover the session
-                    recoverSession(parsedSession);
-                } else {
-                    // Clear the session
-                    clearActiveSession();
-                }
-            } else {
-                // Invalid session data, clear it
-                clearActiveSession();
-            }
-        }
-    } catch (error) {
-        console.error("Error checking for recoverable session:", error);
-        clearActiveSession();
-    }
+try {
+const savedActiveSession = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+if (savedActiveSession) {
+const parsedSession = JSON.parse(savedActiveSession);
+if (parsedSession && parsedSession.id && parsedSession.scans && parsedSession.scans.length > 0) {
+const result = confirm(`Found an incomplete scanning session at ${parsedSession.location} with ${parsedSession.scans.length} scans. Would you like to recover it?`);
+if (result) {
+// Recover the session
+recoverSession(parsedSession);
+} else {
+// Clear the session
+clearActiveSession();
 }
-
+} else {
+// Invalid session data, clear it
+clearActiveSession();
+}
+}
+} catch (error) {
+console.error("Error checking for recoverable session:", error);
+clearActiveSession();
+}
+}
 // Recover active session
 function recoverSession(session) {
-    activeSession = session;
-    
-    // Update UI
-    currentLocation.textContent = session.location;
-    currentDateTime.textContent = session.formattedDateTime;
-    sessionInfo.style.display = 'block';
-    
-    // Update scan table
-    resultBody.innerHTML = '';
-    if (session.scans.length > 0) {
-        noScansMessage.style.display = 'none';
-        resultTable.style.display = 'table';
-        
-        session.scans.forEach(scan => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${scan.id}</td>
-                <td>${escapeHtml(scan.content)}</td>
-                <td>${scan.formattedTime}</td>
-            `;
-            resultBody.appendChild(row);
-        });
-    } else {
-        noScansMessage.style.display = 'block';
-        resultTable.style.display = 'none';
-    }
-    
-    // Switch to scanner tab
-    tabs.forEach(t => t.classList.remove('active'));
-    tabContents.forEach(tc => tc.classList.remove('active'));
-    document.querySelector('[data-tab="scanner"]').classList.add('active');
-    document.getElementById('scanner').classList.add('active');
-    
-    // Update button
-    startSessionBtn.textContent = 'End Session';
-    startSessionBtn.removeEventListener('click', startSessionBtnHandler);
-    startSessionBtn.addEventListener('click', endSessionHandler);
-    
-    // Start camera
-    startCamera();
-    
-    // Start auto-save
-    startAutoSave();
+activeSession = session;
+// Update UI
+currentLocation.textContent = session.location;
+currentDateTime.textContent = session.formattedDateTime;
+sessionInfo.style.display = 'block';
+// Update scan table
+resultBody.innerHTML = '';
+if (session.scans.length > 0) {
+noScansMessage.style.display = 'none';
+resultTable.style.display = 'table';
+session.scans.forEach(scan => {
+const row = document.createElement('tr');
+row.innerHTML = `
+<td>${scan.id}</td>
+<td>${escapeHtml(scan.content)}</td>
+<td>${scan.formattedTime}</td>
+`;
+resultBody.appendChild(row);
+});
+} else {
+noScansMessage.style.display = 'block';
+resultTable.style.display = 'none';
 }
-
+// Switch to scanner tab
+tabs.forEach(t => t.classList.remove('active'));
+tabContents.forEach(tc => tc.classList.remove('active'));
+document.querySelector('[data-tab="scanner"]').classList.add('active');
+document.getElementById('scanner').classList.add('active');
+// Update button
+startSessionBtn.textContent = 'End Session';
+startSessionBtn.removeEventListener('click', startSessionBtnHandler);
+startSessionBtn.addEventListener('click', endSessionHandler);
+// Start camera
+startCamera();
+// Start auto-save
+startAutoSave();
+}
 // Save completed sessions to local storage
 function saveSessionsToStorage() {
-    try {
-        localStorage.setItem(COMPLETED_SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
-        console.log("Completed sessions saved:", sessions.length);
-    } catch (error) {
-        console.error("Error saving completed sessions:", error);
-        alert("Failed to save sessions. Your device might be low on storage space.");
-    }
+try {
+localStorage.setItem(COMPLETED_SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+console.log("Completed sessions saved:", sessions.length);
+} catch (error) {
+console.error("Error saving completed sessions:", error);
+alert("Failed to save sessions. Your device might be low on storage space.");
 }
-
+}
 // Load sessions from local storage
 function loadSessionsFromStorage() {
-    try {
-        const savedSessions = localStorage.getItem(COMPLETED_SESSIONS_STORAGE_KEY);
-        if (savedSessions) {
-            sessions = JSON.parse(savedSessions);
-            console.log("Loaded", sessions.length, "completed sessions");
-        }
-    } catch (error) {
-        console.error("Error loading sessions:", error);
-        sessions = [];
-    }
+try {
+const savedSessions = localStorage.getItem(COMPLETED_SESSIONS_STORAGE_KEY);
+if (savedSessions) {
+sessions = JSON.parse(savedSessions);
+console.log("Loaded", sessions.length, "completed sessions");
 }
-
+} catch (error) {
+console.error("Error loading sessions:", error);
+sessions = [];
+}
+}
 // Warn user before closing the page during active session
 function handleBeforeUnload(event) {
-    if (activeSession) {
-        // Save one last time
-        saveActiveSession();
-        
-        // Show confirmation dialog
-        const message = "You have an active scanning session. Are you sure you want to leave?";
-        event.returnValue = message;
-        return message;
-    }
+if (activeSession) {
+// Save one last time
+saveActiveSession();
+// Show confirmation dialog
+const message = "You have an active scanning session. Are you sure you want to leave?";
+event.returnValue = message;
+return message;
 }
-
+}
 // Update history view with sessions
 function updateHistoryView() {
-    if (sessions.length === 0) {
-        historyList.innerHTML = '<p class="no-results">No scanning sessions found.</p>';
-        return;
-    }
-    
-    // Sort sessions based on selected option
-    const sortValue = sortBy.value;
-    const sortedSessions = [...sessions].sort((a, b) => {
-        if (sortValue === 'date-desc') {
-            return new Date(b.dateTime) - new Date(a.dateTime);
-        } else if (sortValue === 'date-asc') {
-            return new Date(a.dateTime) - new Date(b.dateTime);
-        } else if (sortValue === 'location') {
-            return a.location.localeCompare(b.location);
-        }
-        return 0;
-    });
-    
-    // Generate HTML
-    historyList.innerHTML = '';
-    sortedSessions.forEach(session => {
-        const card = document.createElement('div');
-        card.className = 'card history-item';
-        card.setAttribute('data-id', session.id);
-        card.innerHTML = `
-            <div class="flex-between">
-                <div>
-                    <h3>${escapeHtml(session.location)}</h3>
-                    <p>${session.formattedDateTime}</p>
-                </div>
-                <div>
-                    <p><strong>${session.scans.length}</strong> scans</p>
-                </div>
-            </div>
-        `;
-        card.addEventListener('click', () => {
-            activeSessionId = session.id;
-            showSessionDetails(session);
-        });
-        historyList.appendChild(card);
-    });
+if (sessions.length === 0) {
+historyList.innerHTML = '<p class="no-results">No scanning sessions found.</p>';
+return;
 }
-
+// Sort sessions based on selected option
+const sortValue = sortBy.value;
+const sortedSessions = [...sessions].sort((a, b) => {
+if (sortValue === 'date-desc') {
+return new Date(b.dateTime) - new Date(a.dateTime);
+} else if (sortValue === 'date-asc') {
+return new Date(a.dateTime) - new Date(b.dateTime);
+} else if (sortValue === 'location') {
+return a.location.localeCompare(b.location);
+}
+return 0;
+});
+// Generate HTML
+historyList.innerHTML = '';
+sortedSessions.forEach(session => {
+const card = document.createElement('div');
+card.className = 'card history-item';
+card.setAttribute('data-id', session.id);
+card.innerHTML = `
+<div class="flex-between">
+<div>
+<h3>${escapeHtml(session.location)}</h3>
+<p>${session.formattedDateTime}</p>
+</div>
+<div>
+<p><strong>${session.scans.length}</strong> scans</p>
+</div>
+</div>
+`;
+card.addEventListener('click', () => {
+activeSessionId = session.id;
+showSessionDetails(session);
+});
+historyList.appendChild(card);
+});
+}
 // Show session details
 function showSessionDetails(session) {
-    detailLocation.textContent = session.location;
-    detailDateTime.textContent = session.formattedDateTime;
-    detailCount.textContent = session.scans.length;
-    
-    // Fill table
-    detailsBody.innerHTML = '';
-    session.scans.forEach(scan => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${scan.id}</td>
-            <td>${escapeHtml(scan.content)}</td>
-            <td>${scan.formattedTime}</td>
-        `;
-        detailsBody.appendChild(row);
-    });
-    
-    sessionDetails.style.display = 'block';
+detailLocation.textContent = session.location;
+detailDateTime.textContent = session.formattedDateTime;
+detailCount.textContent = session.scans.length;
+// Fill table
+detailsBody.innerHTML = '';
+session.scans.forEach(scan => {
+const row = document.createElement('tr');
+row.innerHTML = `
+<td>${scan.id}</td>
+<td>${escapeHtml(scan.content)}</td>
+<td>${scan.formattedTime}</td>
+`;
+detailsBody.appendChild(row);
+});
+sessionDetails.style.display = 'block';
 }
-
 // Export single session to Excel
 function exportSession(session) {
-    if (!window.XLSX) {
-        console.error("XLSX library not loaded");
-        alert("Export functionality is not available. Please check your internet connection.");
-        return;
-    }
-    
-    const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
-    
-    // Prepare data with modified column headers
-    const data = [
-        ['Number', 'Student ID', 'Location', 'Date', 'Time']
-    ];
-    
-    session.scans.forEach(scan => {
-        const scanDate = new Date(scan.time);
-        data.push([
-            scan.id,                // Row number (previously ID)
-            scan.content,           // QR code content is now Student ID
-            session.location,
-            formatDate(scanDate),
-            formatTime(scanDate)
-        ]);
-    });
-    
-    // Create workbook
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Scans");
-    
-    // Save file
-    XLSX.writeFile(wb, fileName);
+if (!window.XLSX) {
+console.error("XLSX library not loaded");
+alert("Export functionality is not available. Please check your internet connection.");
+return;
 }
-
+const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
+// Prepare data with modified column headers
+const data = [
+['Number', 'Student ID', 'Location', 'Date', 'Time']
+];
+session.scans.forEach(scan => {
+const scanDate = new Date(scan.time);
+data.push([
+scan.id,                // Row number (previously ID)
+scan.content,           // QR code content is now Student ID
+session.location,
+formatDate(scanDate),
+formatTime(scanDate)
+]);
+});
+// Create workbook
+const ws = XLSX.utils.aoa_to_sheet(data);
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, ws, "Scans");
+// Save file
+XLSX.writeFile(wb, fileName);
+}
 // Export all sessions to Excel
 function exportAllSessions() {
-    if (sessions.length === 0) return;
-    
-    if (!window.XLSX) {
-        console.error("XLSX library not loaded");
-        alert("Export functionality is not available. Please check your internet connection.");
-        return;
-    }
-    
-    const fileName = `QR_Scan_All_Sessions_${formatDateTimeForFile(new Date())}.xlsx`;
-    const wb = XLSX.utils.book_new();
-    
-    // Counter for unique sheet names
-    let sheetCounter = {};
-    
-    // For each session
-    sessions.forEach(session => {
-        const data = [
-            ['Number', 'Student ID', 'Location', 'Date', 'Time']
-        ];
-        
-        session.scans.forEach(scan => {
-            const scanDate = new Date(scan.time);
-            data.push([
-                scan.id,
-                scan.content,
-                session.location,
-                formatDate(scanDate),
-                formatTime(scanDate)
-            ]);
-        });
-        
-        if (data.length > 1) {
-            const ws = XLSX.utils.aoa_to_sheet(data);
-            
-            // Create unique sheet name
-            let baseSheetName = session.location.substring(0, 25).replace(/[^a-z0-9]/gi, '_');
-            if (baseSheetName.length === 0) baseSheetName = "Session";
-            
-            // Ensure uniqueness
-            if (sheetCounter[baseSheetName]) {
-                sheetCounter[baseSheetName]++;
-                baseSheetName = baseSheetName + "_" + sheetCounter[baseSheetName];
-            } else {
-                sheetCounter[baseSheetName] = 1;
-            }
-            
-            // Excel sheet names cannot exceed 31 characters
-            const sheetName = baseSheetName.substring(0, 31);
-            
-            try {
-                XLSX.utils.book_append_sheet(wb, ws, sheetName);
-            } catch (e) {
-                console.error("Error adding sheet:", e);
-                // If there's an error with this sheet, try with a generic name
-                XLSX.utils.book_append_sheet(wb, ws, "Session_" + Math.random().toString(36).substring(2, 7));
-            }
-        }
-    });
-    
-    try {
-        // Save file with error handling
-        XLSX.writeFile(wb, fileName);
-        console.log("File written successfully:", fileName);
-    } catch (e) {
-        console.error("Error writing file:", e);
-        alert("Error exporting file: " + e.message);
-    }
+if (sessions.length === 0) return;
+if (!window.XLSX) {
+console.error("XLSX library not loaded");
+alert("Export functionality is not available. Please check your internet connection.");
+return;
 }
-
+const fileName = `QR_Scan_All_Sessions_${formatDateTimeForFile(new Date())}.xlsx`;
+const wb = XLSX.utils.book_new();
+// Counter for unique sheet names
+let sheetCounter = {};
+// For each session
+sessions.forEach(session => {
+const data = [
+['Number', 'Student ID', 'Location', 'Date', 'Time']
+];
+session.scans.forEach(scan => {
+const scanDate = new Date(scan.time);
+data.push([
+scan.id,
+scan.content,
+session.location,
+formatDate(scanDate),
+formatTime(scanDate)
+]);
+});
+if (data.length > 1) {
+const ws = XLSX.utils.aoa_to_sheet(data);
+// Create unique sheet name
+let baseSheetName = session.location.substring(0, 25).replace(/[^a-z0-9]/gi, '_');
+if (baseSheetName.length === 0) baseSheetName = "Session";
+// Ensure uniqueness
+if (sheetCounter[baseSheetName]) {
+sheetCounter[baseSheetName]++;
+baseSheetName = baseSheetName + "_" + sheetCounter[baseSheetName];
+} else {
+sheetCounter[baseSheetName] = 1;
+}
+// Excel sheet names cannot exceed 31 characters
+const sheetName = baseSheetName.substring(0, 31);
+try {
+XLSX.utils.book_append_sheet(wb, ws, sheetName);
+} catch (e) {
+console.error("Error adding sheet:", e);
+// If there's an error with this sheet, try with a generic name
+XLSX.utils.book_append_sheet(wb, ws, "Session_" + Math.random().toString(36).substring(2, 7));
+}
+}
+});
+try {
+// Save file with error handling
+XLSX.writeFile(wb, fileName);
+console.log("File written successfully:", fileName);
+} catch (e) {
+console.error("Error writing file:", e);
+alert("Error exporting file: " + e.message);
+}
+}
 // Add placeholder for success sound function
 function playSuccessSound() {
-    // Sound functionality could be added here
-    // For now, we just have a placeholder to avoid errors
+// Sound functionality could be added here
+// For now, we just have a placeholder to avoid errors
 }
-
 // Helper function to format date for display
 function formatDate(date) {
-    return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())}`;
+return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())}`;
 }
-
 // Helper function to format time for display
 function formatTime(date) {
-    return `${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
+return `${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
 }
-
 // Helper function to format date and time for display
 function formatDateTime(date) {
-    return `${formatDate(date)} ${formatTime(date)}`;
+return `${formatDate(date)} ${formatTime(date)}`;
 }
-
 // Helper function to format date and time for filenames
 function formatDateTimeForFile(date) {
-    return `${date.getFullYear()}${padZero(date.getMonth() + 1)}${padZero(date.getDate())}_${padZero(date.getHours())}${padZero(date.getMinutes())}`;
+return `${date.getFullYear()}${padZero(date.getMonth() + 1)}${padZero(date.getDate())}_${padZero(date.getHours())}${padZero(date.getMinutes())}`;
 }
-
 // Helper function to pad with leading zero
 function padZero(num) {
-    return num.toString().padStart(2, '0');
+return num.toString().padStart(2, '0');
 }
-
 // Helper function to escape HTML to prevent XSS
 function escapeHtml(text) {
 if (!text) return '';
