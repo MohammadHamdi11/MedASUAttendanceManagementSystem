@@ -323,6 +323,7 @@ const detailsBody = document.getElementById('detailsBody');
 const exportSessionBtn = document.getElementById('exportSessionBtn');
 const closeDetailsBtn = document.getElementById('closeDetailsBtn');
 const sortBy = document.getElementById('sortBy');
+
 // Application State
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
@@ -334,221 +335,820 @@ let activeSessionId = null;
 let lastScannedCodes = new Set(); // For avoiding duplicate scans in quick succession
 let jsQRLoaded = false;
 let autoSaveInterval = null;
+
 // Constants for auto-save functionality
 const AUTO_SAVE_DELAY = 3000; // 3 seconds
 const ACTIVE_SESSION_STORAGE_KEY = 'qrScannerActiveSession';
 const COMPLETED_SESSIONS_STORAGE_KEY = 'qrScannerSessions';
 const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex'; // For tracking in-progress session in history
+
+// GitHub backup constants
+const GITHUB_BACKUP_QUEUE_KEY = 'qrScannerBackupQueue';
+const GITHUB_BACKUP_CONFIG_KEY = 'qrScannerGithubConfig';
+const GITHUB_LAST_BACKUP_KEY = 'qrScannerLastBackup';
+const GITHUB_API_URL = 'https://api.github.com';
+
+// Default GitHub backup configuration
+let githubBackupConfig = {
+    enabled: false,
+    token: '', // Never store actual token in localStorage - we'll prompt user
+    owner: 'MohammadHamdi11',
+    repo: 'QRScanner-webapp',
+    path: 'backups',
+    branch: 'main',
+    autoBackup: true,
+    lastBackupTime: null
+};
+
+// Queue of sessions waiting to be backed up to GitHub
+let backupQueue = [];
+
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
-console.log("DOM fully loaded");
-loadSessionsFromStorage();
-checkForRecoverableSession();
-updateHistoryView();
-// Check if jsQR is already defined (from the script tag in HTML)
-if (typeof jsQR === 'function') {
-console.log("jsQR is already loaded from local file");
-jsQRLoaded = true;
-} else {
-console.log("jsQR not detected, will attempt to load");
-loadJsQR()
-.then(() => console.log("jsQR library loaded and ready"))
-.catch(error => {
-console.error("Error loading jsQR:", error);
-alert("Failed to load QR code scanning library. Please check your files and try again.");
+    console.log("DOM fully loaded");
+    
+    // Load GitHub backup configuration
+    loadGitHubBackupConfig();
+    
+    // Load backup queue
+    loadBackupQueue();
+    
+    loadSessionsFromStorage();
+    checkForRecoverableSession();
+    updateHistoryView();
+    
+    // Check if jsQR is already defined (from the script tag in HTML)
+    if (typeof jsQR === 'function') {
+        console.log("jsQR is already loaded from local file");
+        jsQRLoaded = true;
+    } else {
+        console.log("jsQR not detected, will attempt to load");
+        loadJsQR()
+        .then(() => console.log("jsQR library loaded and ready"))
+        .catch(error => {
+            console.error("Error loading jsQR:", error);
+            alert("Failed to load QR code scanning library. Please check your files and try again.");
+        });
+    }
+    
+    // Add beforeunload event listener to prevent accidental closing during active session
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Check for internet connection and process backup queue
+    if (navigator.onLine) {
+        processBackupQueue();
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    // Add GitHub backup settings UI element
+    initGitHubBackupUI();
 });
-}
-// Add beforeunload event listener to prevent accidental closing during active session
-window.addEventListener('beforeunload', handleBeforeUnload);
-});
+
 // Load jsQR from local file
 function loadJsQR() {
-return new Promise((resolve, reject) => {
-// Check if jsQR is already loaded
-if (typeof jsQR === 'function') {
-jsQRLoaded = true;
-resolve(true);
-return;
+    return new Promise((resolve, reject) => {
+        // Check if jsQR is already loaded
+        if (typeof jsQR === 'function') {
+            jsQRLoaded = true;
+            resolve(true);
+            return;
+        }
+        
+        // Create a new script element to load the local file
+        const script = document.createElement('script');
+        script.src = 'jsQR.min.js'; // Local file path
+        
+        // Set event handlers
+        script.onload = () => {
+            console.log("jsQR loaded successfully from local file");
+            jsQRLoaded = true;
+            resolve(true);
+        };
+        script.onerror = (error) => {
+            console.error("Failed to load local jsQR:", error);
+            reject(error);
+        };
+        
+        // Add the script to the document
+        document.head.appendChild(script);
+    });
 }
-// Create a new script element to load the local file
-const script = document.createElement('script');
-script.src = 'jsQR.min.js'; // Local file path
-// Set event handlers
-script.onload = () => {
-console.log("jsQR loaded successfully from local file");
-jsQRLoaded = true;
-resolve(true);
-};
-script.onerror = (error) => {
-console.error("Failed to load local jsQR:", error);
-reject(error);
-};
-// Add the script to the document
-document.head.appendChild(script);
-});
-}
+
 // Register Service Worker for PWA functionality
 if ('serviceWorker' in navigator) {
-window.addEventListener('load', () => {
-navigator.serviceWorker.register('sw.js')
-.then(registration => {
-console.log('ServiceWorker registration successful with scope: ', registration.scope);
-})
-.catch(err => {
-console.log('ServiceWorker registration failed: ', err);
-});
-});
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+        .then(registration => {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        })
+        .catch(err => {
+            console.log('ServiceWorker registration failed: ', err);
+        });
+    });
 }
+
+// Online/Offline handlers
+function handleOnline() {
+    console.log("Internet connection detected");
+    updateBackupStatus("Connected - Processing backup queue...");
+    
+    // Process any pending backups
+    processBackupQueue();
+}
+
+function handleOffline() {
+    console.log("Internet connection lost");
+    updateBackupStatus("Offline - Backups queued for later");
+}
+
+// Initialize GitHub backup UI
+function initGitHubBackupUI() {
+    // Create the settings tab if it doesn't exist
+    if (!document.getElementById('settings')) {
+        // Add settings tab button
+        const settingsTab = document.createElement('div');
+        settingsTab.className = 'tab';
+        settingsTab.setAttribute('data-tab', 'settings');
+        settingsTab.textContent = 'Settings';
+        document.querySelector('.tabs').appendChild(settingsTab);
+        
+        // Add settings tab content
+        const settingsContent = document.createElement('div');
+        settingsContent.className = 'tab-content';
+        settingsContent.id = 'settings';
+        settingsContent.innerHTML = `
+            <h2>GitHub Backup Settings</h2>
+            <div class="backup-status-container">
+                <div id="backup-status" class="backup-status">
+                    <span class="status-indicator ${navigator.onLine ? 'online' : 'offline'}"></span>
+                    <span id="backup-status-text">${navigator.onLine ? 'Connected' : 'Offline'}</span>
+                </div>
+                <div id="last-backup-time">Last backup: Never</div>
+            </div>
+            <div class="settings-form">
+                <div class="form-group">
+                    <label for="github-backup-enabled">Enable GitHub Backup</label>
+                    <input type="checkbox" id="github-backup-enabled" ${githubBackupConfig.enabled ? 'checked' : ''}>
+                </div>
+                <div class="form-group">
+                    <label for="github-token">GitHub Token (Personal Access Token)</label>
+                    <input type="password" id="github-token" placeholder="Enter GitHub token">
+                    <small>Your token is never stored in plain text. You'll need to re-enter it when you reopen the app.</small>
+                </div>
+                <div class="form-group">
+                    <label for="github-owner">Repository Owner</label>
+                    <input type="text" id="github-owner" value="${githubBackupConfig.owner}">
+                </div>
+                <div class="form-group">
+                    <label for="github-repo">Repository Name</label>
+                    <input type="text" id="github-repo" value="${githubBackupConfig.repo}">
+                </div>
+                <div class="form-group">
+                    <label for="github-path">Backup Folder Path</label>
+                    <input type="text" id="github-path" value="${githubBackupConfig.path}">
+                </div>
+                <div class="form-group">
+                    <label for="github-branch">Branch</label>
+                    <input type="text" id="github-branch" value="${githubBackupConfig.branch}">
+                </div>
+                <div class="form-group">
+                    <label for="github-auto-backup">Auto Backup New Sessions</label>
+                    <input type="checkbox" id="github-auto-backup" ${githubBackupConfig.autoBackup ? 'checked' : ''}>
+                </div>
+                <div class="buttons">
+                    <button id="save-github-settings" class="button">Save Settings</button>
+                    <button id="test-connection" class="button">Test Connection</button>
+                    <button id="force-backup" class="button">Force Backup All</button>
+                </div>
+                <div id="queue-status">
+                    Items in backup queue: ${backupQueue.length}
+                </div>
+            </div>
+        `;
+        document.querySelector('.content').appendChild(settingsContent);
+        
+        // Add CSS for the backup settings
+        const style = document.createElement('style');
+        style.textContent = `
+            .backup-status-container {
+                margin-bottom: 20px;
+                padding: 10px;
+                background-color: #f5f5f5;
+                border-radius: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .backup-status {
+                display: flex;
+                align-items: center;
+            }
+            .status-indicator {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                margin-right: 8px;
+            }
+            .online {
+                background-color: #4CAF50;
+                box-shadow: 0 0 5px #4CAF50;
+            }
+            .offline {
+                background-color: #F44336;
+            }
+            .warning {
+                background-color: #FFC107;
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            .form-group label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: bold;
+            }
+            .form-group input[type="text"], 
+            .form-group input[type="password"] {
+                width: 100%;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .form-group small {
+                color: #666;
+                font-size: 0.8em;
+            }
+            #queue-status {
+                margin-top: 15px;
+                padding: 10px;
+                background-color: #f0f0f0;
+                border-radius: 4px;
+            }
+            .backup-item {
+                position: relative;
+            }
+            .backup-indicator {
+                position: absolute;
+                top: 5px;
+                right: 10px;
+                font-size: 0.8em;
+                padding: 2px 5px;
+                border-radius: 3px;
+                color: white;
+            }
+            .backed-up {
+                background-color: #4CAF50;
+            }
+            .not-backed-up {
+                background-color: #F44336;
+            }
+            .backup-pending {
+                background-color: #FFC107;
+                color: black;
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Add event listeners for the settings
+        document.getElementById('save-github-settings').addEventListener('click', saveGitHubSettings);
+        document.getElementById('test-connection').addEventListener('click', testGitHubConnection);
+        document.getElementById('force-backup').addEventListener('click', forceBackupAll);
+        
+        // Register the tab click event for the new tab
+        document.querySelector('.tab[data-tab="settings"]').addEventListener('click', () => {
+            const tabId = 'settings';
+            tabs.forEach(t => t.classList.remove('active'));
+            tabContents.forEach(tc => tc.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+            
+            // Update the queue status when the tab is opened
+            document.getElementById('queue-status').textContent = `Items in backup queue: ${backupQueue.length}`;
+            updateLastBackupTime();
+        });
+    }
+    
+    // Update the last backup time display
+    updateLastBackupTime();
+}
+
+// Update backup status UI
+function updateBackupStatus(message, status = 'info') {
+    const statusText = document.getElementById('backup-status-text');
+    const statusIndicator = document.querySelector('.status-indicator');
+    
+    if (statusText && statusIndicator) {
+        statusText.textContent = message;
+        
+        // Update the indicator color based on status
+        statusIndicator.className = 'status-indicator';
+        if (status === 'error') {
+            statusIndicator.classList.add('offline');
+        } else if (status === 'warning') {
+            statusIndicator.classList.add('warning');
+        } else if (status === 'success') {
+            statusIndicator.classList.add('online');
+        } else {
+            // Default to the navigator online status
+            statusIndicator.classList.add(navigator.onLine ? 'online' : 'offline');
+        }
+    }
+}
+
+// Update last backup time display
+function updateLastBackupTime() {
+    const lastBackupElement = document.getElementById('last-backup-time');
+    if (lastBackupElement) {
+        const lastBackup = localStorage.getItem(GITHUB_LAST_BACKUP_KEY);
+        if (lastBackup) {
+            const lastBackupDate = new Date(JSON.parse(lastBackup));
+            lastBackupElement.textContent = `Last backup: ${formatDateTime(lastBackupDate)}`;
+        } else {
+            lastBackupElement.textContent = `Last backup: Never`;
+        }
+    }
+}
+
+// Save GitHub settings from the form
+function saveGitHubSettings() {
+    const enabled = document.getElementById('github-backup-enabled').checked;
+    const token = document.getElementById('github-token').value;
+    const owner = document.getElementById('github-owner').value;
+    const repo = document.getElementById('github-repo').value;
+    const path = document.getElementById('github-path').value;
+    const branch = document.getElementById('github-branch').value;
+    const autoBackup = document.getElementById('github-auto-backup').checked;
+    
+    // Validate inputs
+    if (enabled && (!token || !owner || !repo)) {
+        alert('Please fill in all required fields (token, owner, repository)');
+        return;
+    }
+    
+    // Update config
+    githubBackupConfig.enabled = enabled;
+    githubBackupConfig.owner = owner;
+    githubBackupConfig.repo = repo;
+    githubBackupConfig.path = path || 'backups';
+    githubBackupConfig.branch = branch || 'main';
+    githubBackupConfig.autoBackup = autoBackup;
+    
+    // Store the token securely (in memory only, not in localStorage)
+    if (token) {
+        githubBackupConfig.token = token;
+        
+        // For security, clear the input field
+        document.getElementById('github-token').value = '••••••••';
+    }
+    
+    // Save config (without token) to localStorage
+    const safeConfig = { ...githubBackupConfig };
+    delete safeConfig.token;  // Never store token in localStorage
+    localStorage.setItem(GITHUB_BACKUP_CONFIG_KEY, JSON.stringify(safeConfig));
+    
+    alert('GitHub backup settings saved!');
+    
+    // If enabled and we have queued items, try to process them
+    if (enabled && backupQueue.length > 0 && navigator.onLine) {
+        processBackupQueue();
+    }
+}
+
+// Test GitHub connection
+async function testGitHubConnection() {
+    const token = githubBackupConfig.token || document.getElementById('github-token').value;
+    const owner = document.getElementById('github-owner').value;
+    const repo = document.getElementById('github-repo').value;
+    
+    if (!token || !owner || !repo) {
+        alert('Please fill in all required fields and save settings first');
+        return;
+    }
+    
+    updateBackupStatus("Testing connection...", "warning");
+    
+    try {
+        // Test connection by getting repo info
+        const response = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repo}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (response.ok) {
+            const repoInfo = await response.json();
+            updateBackupStatus(`Connected to ${repoInfo.full_name}`, "success");
+            alert('Connection successful! Repository access confirmed.');
+        } else {
+            const error = await response.json();
+            updateBackupStatus(`Connection failed: ${error.message}`, "error");
+            alert(`Connection failed: ${error.message}`);
+        }
+    } catch (error) {
+        updateBackupStatus(`Connection error: ${error.message}`, "error");
+        alert(`Connection error: ${error.message}`);
+    }
+}
+
+// Force backup of all sessions
+function forceBackupAll() {
+    if (!githubBackupConfig.enabled || !githubBackupConfig.token) {
+        alert('Please enable backup and provide a GitHub token first');
+        return;
+    }
+    
+    if (!navigator.onLine) {
+        alert('You are currently offline. Sessions will be backed up once connection is restored.');
+        return;
+    }
+    
+    // Clear existing queue
+    backupQueue = [];
+    
+    // Add all sessions to the queue
+    sessions.forEach(session => {
+        addToBackupQueue(session);
+    });
+    
+    // Update UI
+    document.getElementById('queue-status').textContent = `Items in backup queue: ${backupQueue.length}`;
+    
+    // Start processing queue
+    processBackupQueue();
+}
+
+// Load GitHub backup configuration from localStorage
+function loadGitHubBackupConfig() {
+    try {
+        const savedConfig = localStorage.getItem(GITHUB_BACKUP_CONFIG_KEY);
+        if (savedConfig) {
+            const parsedConfig = JSON.parse(savedConfig);
+            // Merge with default config, preserving token in memory
+            githubBackupConfig = { ...githubBackupConfig, ...parsedConfig };
+        }
+    } catch (error) {
+        console.error("Error loading GitHub backup config:", error);
+    }
+}
+
+// Load backup queue from localStorage
+function loadBackupQueue() {
+    try {
+        const savedQueue = localStorage.getItem(GITHUB_BACKUP_QUEUE_KEY);
+        if (savedQueue) {
+            backupQueue = JSON.parse(savedQueue);
+            console.log(`Loaded ${backupQueue.length} items in backup queue`);
+        }
+    } catch (error) {
+        console.error("Error loading backup queue:", error);
+        backupQueue = [];
+    }
+}
+
+// Save backup queue to localStorage
+function saveBackupQueue() {
+    try {
+        localStorage.setItem(GITHUB_BACKUP_QUEUE_KEY, JSON.stringify(backupQueue));
+    } catch (error) {
+        console.error("Error saving backup queue:", error);
+    }
+}
+
+// Add session to backup queue
+function addToBackupQueue(session) {
+    // Check if session is already in queue
+    const existingIndex = backupQueue.findIndex(item => item.id === session.id);
+    
+    if (existingIndex === -1) {
+        backupQueue.push({
+            id: session.id,
+            timestamp: new Date().toISOString(),
+            retryCount: 0
+        });
+        
+        // Save updated queue
+        saveBackupQueue();
+        
+        console.log(`Added session ${session.id} to backup queue`);
+        
+        // If we're online and backup is enabled, process queue
+        if (navigator.onLine && githubBackupConfig.enabled && githubBackupConfig.token) {
+            processBackupQueue();
+        }
+    }
+}
+
+// Process the backup queue
+async function processBackupQueue() {
+    if (!navigator.onLine || !githubBackupConfig.enabled || !githubBackupConfig.token) {
+        return;
+    }
+    
+    if (backupQueue.length === 0) {
+        updateBackupStatus("Backup complete - all sessions synced", "success");
+        return;
+    }
+    
+    updateBackupStatus(`Processing backup queue (${backupQueue.length} items)...`, "warning");
+    
+    // Process one item at a time
+    const item = backupQueue[0];
+    const session = sessions.find(s => s.id === item.id);
+    
+    if (!session) {
+        // Session no longer exists, remove from queue
+        backupQueue.shift();
+        saveBackupQueue();
+        processBackupQueue(); // Continue with next item
+        return;
+    }
+    
+    try {
+        await backupSessionToGitHub(session);
+        
+        // Success - remove from queue
+        backupQueue.shift();
+        saveBackupQueue();
+        
+        // Update UI
+        if (document.getElementById('queue-status')) {
+            document.getElementById('queue-status').textContent = `Items in backup queue: ${backupQueue.length}`;
+        }
+        
+        // Process next item if any
+        if (backupQueue.length > 0) {
+            setTimeout(() => processBackupQueue(), 1000); // Add delay to avoid rate limiting
+        } else {
+            updateBackupStatus("All backups complete!", "success");
+            
+            // Update last backup time
+            localStorage.setItem(GITHUB_LAST_BACKUP_KEY, JSON.stringify(new Date().toISOString()));
+            updateLastBackupTime();
+        }
+    } catch (error) {
+        console.error("Backup failed:", error);
+        
+        // Increment retry count
+        item.retryCount = (item.retryCount || 0) + 1;
+        
+        if (item.retryCount >= 3) {
+            // Too many retries, move to the end of the queue
+            backupQueue.shift();
+            backupQueue.push(item);
+        }
+        
+        saveBackupQueue();
+        updateBackupStatus(`Backup error: ${error.message}`, "error");
+        
+        // Try again later
+        setTimeout(() => processBackupQueue(), 5000);
+    }
+}
+
+// Backup session to GitHub
+async function backupSessionToGitHub(session) {
+    if (!session || !githubBackupConfig.token) {
+        throw new Error("Invalid session or missing GitHub token");
+    }
+    
+    const { token, owner, repo, path, branch } = githubBackupConfig;
+    
+    // Create filename
+    const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.json`;
+    const filePath = path ? `${path}/${fileName}` : fileName;
+    
+    // Prepare session data (without sensitive information)
+    const sessionData = JSON.stringify(session, null, 2);
+    
+    try {
+        // Check if file already exists
+        let sha = null;
+        try {
+            const checkResponse = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (checkResponse.ok) {
+                const fileInfo = await checkResponse.json();
+                sha = fileInfo.sha;
+            }
+        } catch (e) {
+            // File doesn't exist yet, which is fine
+        }
+        
+        // Create or update file
+        const response = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repo}/contents/${filePath}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: `Update scan session: ${session.location} (${session.formattedDateTime})`,
+                content: btoa(sessionData), // Base64 encode content
+                branch: branch,
+                sha: sha
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || "GitHub API error");
+        }
+        
+        console.log(`Successfully backed up session ${session.id} to GitHub`);
+        return true;
+    } catch (error) {
+        console.error("GitHub backup error:", error);
+        throw error;
+    }
+}
+
 // Tab Navigation
 tabs.forEach(tab => {
-tab.addEventListener('click', () => {
-const tabId = tab.getAttribute('data-tab');
-tabs.forEach(t => t.classList.remove('active'));
-tabContents.forEach(tc => tc.classList.remove('active'));
-tab.classList.add('active');
-document.getElementById(tabId).classList.add('active');
+    tab.addEventListener('click', () => {
+        const tabId = tab.getAttribute('data-tab');
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+    });
 });
-});
+
 // Start Session Button
 startSessionBtn.addEventListener('click', () => {
-// Before showing the modal, verify if jsQR is loaded
-if (!jsQRLoaded) {
-loadJsQR()
-.then(() => {
-sessionModal.style.display = 'block';
-locationInput.focus();
-})
-.catch(() => {
-alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
+    // Before showing the modal, verify if jsQR is loaded
+    if (!jsQRLoaded) {
+        loadJsQR()
+        .then(() => {
+            sessionModal.style.display = 'block';
+            locationInput.focus();
+        })
+        .catch(() => {
+            alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
+        });
+    } else {
+        sessionModal.style.display = 'block';
+        locationInput.focus();
+    }
 });
-} else {
-sessionModal.style.display = 'block';
-locationInput.focus();
-}
-});
+
 // Close Modal
 closeModalBtn.addEventListener('click', () => {
-sessionModal.style.display = 'none';
+    sessionModal.style.display = 'none';
 });
+
 // Start new scanning session
 confirmSessionBtn.addEventListener('click', () => {
-const location = locationInput.value.trim();
-if (!location) {
-alert('Please enter a location');
-return;
-}
-// Hide modal
-sessionModal.style.display = 'none';
-// Create new session
-const now = new Date();
-const sessionId = `session_${now.getTime()}`;
-const formattedDateTime = formatDateTime(now);
-activeSession = {
-id: sessionId,
-location: location,
-dateTime: now.toISOString(),
-formattedDateTime: formattedDateTime,
-scans: [],
-inProgress: true // Flag to indicate session is in progress
-};
-// Add the session to the completed sessions array immediately
-// This ensures it's in history even if app crashes
-sessions.push(activeSession);
-// Save the session index for recovery purposes
-localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
-// Update UI
-currentLocation.textContent = location;
-currentDateTime.textContent = formattedDateTime;
-sessionInfo.style.display = 'block';
-// Start camera
-startCamera();
-// Clear previous results
-resultBody.innerHTML = '';
-resultTable.style.display = 'none';
-noScansMessage.style.display = 'block';
-// Start auto-save interval
-startAutoSave();
-// Save all sessions to storage
-saveSessionsToStorage();
-// Save the active session separately for recovery
-saveActiveSession();
-// Update button
-startSessionBtn.textContent = 'End Session';
-startSessionBtn.removeEventListener('click', startSessionBtnHandler);
-startSessionBtn.addEventListener('click', endSessionHandler);
-// Update history view to show the new session
-updateHistoryView();
+    const location = locationInput.value.trim();
+    if (!location) {
+        alert('Please enter a location');
+        return;
+    }
+    
+    // Hide modal
+    sessionModal.style.display = 'none';
+    
+    // Create new session
+    const now = new Date();
+    const sessionId = `session_${now.getTime()}`;
+    const formattedDateTime = formatDateTime(now);
+    activeSession = {
+        id: sessionId,
+        location: location,
+        dateTime: now.toISOString(),
+        formattedDateTime: formattedDateTime,
+        scans: [],
+        inProgress: true // Flag to indicate session is in progress
+    };
+    
+    // Add the session to the completed sessions array immediately
+    // This ensures it's in history even if app crashes
+    sessions.push(activeSession);
+    
+    // Save the session index for recovery purposes
+    localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
+    
+    // Update UI
+    currentLocation.textContent = location;
+    currentDateTime.textContent = formattedDateTime;
+    sessionInfo.style.display = 'block';
+    
+    // Start camera
+    startCamera();
+    
+    // Clear previous results
+    resultBody.innerHTML = '';
+    resultTable.style.display = 'none';
+    noScansMessage.style.display = 'block';
+    
+    // Start auto-save interval
+    startAutoSave();
+    
+    // Save all sessions to storage
+    saveSessionsToStorage();
+    
+    // Save the active session separately for recovery
+    saveActiveSession();
+    
+    // Update button
+    startSessionBtn.textContent = 'End Session';
+    startSessionBtn.removeEventListener('click', startSessionBtnHandler);
+    startSessionBtn.addEventListener('click', endSessionHandler);
+    
+    // Update history view to show the new session
+    updateHistoryView();
 });
+
 // Start auto-save interval
 function startAutoSave() {
-// Clear any existing interval
-if (autoSaveInterval) {
-clearInterval(autoSaveInterval);
+    // Clear any existing interval
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+    }
+    
+    // Set new interval
+    autoSaveInterval = setInterval(() => {
+        if (activeSession) {
+            console.log("Auto-saving session data...");
+            // Save to both active session storage and the history
+            saveActiveSession();
+            saveSessionsToStorage();
+            // Update history view to reflect changes
+            updateHistoryView();
+        }
+    }, AUTO_SAVE_DELAY);
 }
-// Set new interval
-autoSaveInterval = setInterval(() => {
-if (activeSession) {
-console.log("Auto-saving session data...");
-// Save to both active session storage and the history
-saveActiveSession();
-saveSessionsToStorage();
-// Update history view to reflect changes
-updateHistoryView();
-}
-}, AUTO_SAVE_DELAY);
-}
+
 // Stop auto-save interval
 function stopAutoSave() {
-if (autoSaveInterval) {
-clearInterval(autoSaveInterval);
-autoSaveInterval = null;
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        autoSaveInterval = null;
+    }
 }
-}
+
 // Improved camera initialization function
 async function startCamera() {
-try {
-// Create scanner UI elements
-setupScannerUI();
-// Try to get camera access
-const constraints = {
-video: {
-facingMode: 'environment',
-width: { ideal: 1280 },
-height: { ideal: 720 }
-}
-};
-console.log("Requesting camera access with constraints:", constraints);
-videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-console.log("Camera access granted:", videoStream);
-// Set up video element
-video.srcObject = videoStream;
-video.setAttribute("playsinline", true);
-video.onloadedmetadata = () => {
-console.log(`Video ready: ${video.videoWidth}x${video.videoHeight}`);
-// Set canvas dimensions to match video
-canvasElement.width = video.videoWidth;
-canvasElement.height = video.videoHeight;
-// Start video playback
-video.play()
-.then(() => {
-console.log("Video playback started");
-scannerPlaceholder.style.display = 'none';
-video.style.display = 'block';
-// Start scanning
-scanning = true;
-requestAnimationFrame(scanQRCode);
-// Show scanning indicator
-updateScanStatus('Camera active - looking for QR codes');
-})
-.catch(error => {
-console.error("Video playback failed:", error);
-alert("Failed to start video playback. Please try again.");
-});
-};
-} catch (error) {
-console.error("Camera access error:", error);
-alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
-}
+    try {
+        // Create scanner UI elements
+        setupScannerUI();
+        
+        // Try to get camera access
+        const constraints = {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        };
+        console.log("Requesting camera access with constraints:", constraints);
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Camera access granted:", videoStream);
+        
+        // Set up video element
+        video.srcObject = videoStream;
+        video.setAttribute("playsinline", true);
+        video.onloadedmetadata = () => {
+            console.log(`Video ready: ${video.videoWidth}x${video.videoHeight}`);
+            
+            // Set canvas dimensions to match video
+            canvasElement.width = video.videoWidth;
+            canvasElement.height = video.videoHeight;
+            
+            // Start video playback
+            video.play()
+            .then(() => {
+                console.log("Video playback started");
+                scannerPlaceholder.style.display = 'none';
+                video.style.display = 'block';
+                
+                // Start scanning
+                scanning = true;
+                requestAnimationFrame(scanQRCode);
+                
+                // Show scanning indicator
+                updateScanStatus('Camera active - looking for QR codes');
+            })
+            .catch(error => {
+                console.error("Video playback failed:", error);
+                alert("Failed to start video playback. Please try again.");
+            });
+        };
+    } catch (error) {
+        console.error("Camera access error:", error);
+        alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
+    }
 }
 // Set up scanner UI elements
 function setupScannerUI() {
