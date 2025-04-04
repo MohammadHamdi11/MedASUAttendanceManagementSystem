@@ -346,7 +346,12 @@ const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex'; // For tracking in-p
 const GITHUB_BACKUP_QUEUE_KEY = 'qrScannerBackupQueue';
 const GITHUB_BACKUP_CONFIG_KEY = 'qrScannerGithubConfig';
 const GITHUB_LAST_BACKUP_KEY = 'qrScannerLastBackup';
-const GITHUB_API_URL = 'https://api.github.com';
+const GITHUB_API_URL = "https://api.github.com";
+const owner = "MohammadHamdi11"; // Replace with the repository owner's username
+const repo = "QRScanner-webapp"; // Replace with the repository name
+const token = "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"; 
+const filePath = "backups"; 
+const branch = "main"; 
 
 // Default GitHub backup configuration
 let githubBackupConfig = {
@@ -1150,6 +1155,7 @@ async function startCamera() {
         alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
     }
 }
+
 // Set up scanner UI elements
 function setupScannerUI() {
 // Remove any existing UI elements first
