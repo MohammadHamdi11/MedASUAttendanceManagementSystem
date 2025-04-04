@@ -411,52 +411,136 @@ startSessionBtn.addEventListener('click', endSessionHandler);
 });
 // Start scanner function
 async function startScanner() {
-try {
-const constraints = {
-video: { 
-facingMode: "environment",
-width: { ideal: 1280 },
-height: { ideal: 720 }
-}
-};
-videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-video.srcObject = videoStream;
-video.setAttribute("playsinline", true);
-video.play();
-scanning = true;
-scannerPlaceholder.style.display = 'none';
-video.style.display = 'block';
-requestAnimationFrame(tick);
-} catch (error) {
-console.error("Failed to access camera:", error);
-alert("Failed to access camera. Please ensure camera permissions are enabled.");
-}
+  try {
+    const constraints = {
+      video: { 
+        facingMode: "environment",
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
+    
+    videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = videoStream;
+    video.setAttribute("playsinline", true);
+    
+    // Wait for video to be loaded before starting the scanning process
+    video.onloadedmetadata = () => {
+      video.play();
+      scanning = true;
+      scannerPlaceholder.style.display = 'none';
+      video.style.display = 'block';
+      
+      // Enable debugging if needed
+      const enableDebug = true;
+      if (enableDebug) {
+        debugQrScanner();
+      }
+      
+      // Start the scanning process
+      requestAnimationFrame(tick);
+    };
+    
+  } catch (error) {
+    console.error("Failed to access camera:", error);
+    alert("Failed to access camera. Please ensure camera permissions are enabled.");
+  }
 }
 // QR code scanning loop
 function tick() {
-if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
-canvasElement.height = video.videoHeight;
-canvasElement.width = video.videoWidth;
-canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-const code = jsQR(imageData.data, imageData.width, imageData.height, {
-inversionAttempts: "dontInvert",
-});
-if (code && code.data) {
-// Check if this code was recently scanned (to prevent duplicates)
-if (!lastScannedCodes.has(code.data)) {
-// Add to recent scans set and set timeout to remove
-lastScannedCodes.add(code.data);
-setTimeout(() => {
-lastScannedCodes.delete(code.data);
-}, 3000); // Prevent duplicate scans for 3 seconds
-processScannedCode(code.data);
+  if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
+    // Set canvas size to match video dimensions
+    canvasElement.height = video.videoHeight;
+    canvasElement.width = video.videoWidth;
+    
+    // Draw the video frame to the canvas
+    canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+    
+    // Get image data from the canvas
+    const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+    
+    try {
+      // Add a console log to verify processing is happening
+      console.log("Processing frame for QR code");
+      
+      // Process the image data with jsQR
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+      
+      // If a QR code is found, process it
+      if (code && code.data) {
+        console.log("QR Code detected:", code.data);
+        
+        // Visual feedback (optional - draw QR code location)
+        canvas.beginPath();
+        canvas.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
+        canvas.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
+        canvas.lineTo(code.location.bottomRightCorner.x, code.location.bottomRightCorner.y);
+        canvas.lineTo(code.location.bottomLeftCorner.x, code.location.bottomLeftCorner.y);
+        canvas.lineTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
+        canvas.lineWidth = 4;
+        canvas.strokeStyle = "#FF3B58";
+        canvas.stroke();
+        
+        // Check if this code was recently scanned (to prevent duplicates)
+        if (!lastScannedCodes.has(code.data)) {
+          // Add to recent scans set and set timeout to remove
+          lastScannedCodes.add(code.data);
+          setTimeout(() => {
+            lastScannedCodes.delete(code.data);
+          }, 3000); // Prevent duplicate scans for 3 seconds
+          
+          // Process the scanned code
+          processScannedCode(code.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error processing QR code:", error);
+    }
+    
+    // Continue scanning
+    requestAnimationFrame(tick);
+  } else if (scanning) {
+    requestAnimationFrame(tick);
+  }
 }
-}
-requestAnimationFrame(tick);
-} else if (scanning) {
-requestAnimationFrame(tick);
-}
+function debugQrScanner() {
+  // Create debugging elements
+  const debugContainer = document.createElement('div');
+  debugContainer.style.position = 'absolute';
+  debugContainer.style.top = '10px';
+  debugContainer.style.left = '10px';
+  debugContainer.style.background = 'rgba(0,0,0,0.5)';
+  debugContainer.style.color = 'white';
+  debugContainer.style.padding = '10px';
+  debugContainer.style.borderRadius = '5px';
+  debugContainer.style.zIndex = '1000';
+  debugContainer.style.fontSize = '12px';
+  
+  const debugText = document.createElement('pre');
+  debugContainer.appendChild(debugText);
+  document.querySelector('.scanner-container').appendChild(debugContainer);
+  
+  // Add canvas to the page for visualizing what the QR scanner sees
+  canvasElement.style.display = 'block';
+  canvasElement.style.position = 'absolute';
+  canvasElement.style.top = '0';
+  canvasElement.style.left = '0';
+  canvasElement.style.width = '160px';
+  canvasElement.style.height = '120px';
+  canvasElement.style.border = '2px solid red';
+  canvasElement.style.zIndex = '999';
+  document.querySelector('.scanner-container').appendChild(canvasElement);
+  
+  // Update debug info periodically
+  setInterval(() => {
+    if (video.videoWidth) {
+      debugText.textContent = `Video: ${video.videoWidth}x${video.videoHeight}\n` +
+                             `Canvas: ${canvasElement.width}x${canvasElement.height}\n` +
+                             `Scanning: ${scanning}`;
+    }
+  }, 1000);
 }
 // Process scanned QR code
 function processScannedCode(data) {
