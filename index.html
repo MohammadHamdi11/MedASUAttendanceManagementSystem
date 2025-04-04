@@ -297,7 +297,6 @@ margin: 10% auto;
 <!-- Script for Excel Export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-// Modified code to save sessions to history while scanning
 // DOM Elements
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
@@ -324,6 +323,7 @@ const detailsBody = document.getElementById('detailsBody');
 const exportSessionBtn = document.getElementById('exportSessionBtn');
 const closeDetailsBtn = document.getElementById('closeDetailsBtn');
 const sortBy = document.getElementById('sortBy');
+
 // Application State
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
@@ -335,37 +335,38 @@ let activeSessionId = null;
 let lastScannedCodes = new Set(); // For avoiding duplicate scans in quick succession
 let jsQRLoaded = false;
 let autoSaveInterval = null;
+
 // Constants for auto-save functionality
 const AUTO_SAVE_DELAY = 3000; // 3 seconds
 const ACTIVE_SESSION_STORAGE_KEY = 'qrScannerActiveSession';
 const COMPLETED_SESSIONS_STORAGE_KEY = 'qrScannerSessions';
 const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex'; // For tracking in-progress session in history
-// Constants for backup functionality
-const BACKUP_QUEUE_STORAGE_KEY = 'qrScannerBackupQueue';
+const EMAIL_BACKUP_QUEUE_KEY = 'qrScannerEmailBackupQueue';
 const LAST_BACKUP_TIME_KEY = 'qrScannerLastBackupTime';
-const BACKUP_EMAIL = '231249@med.asu.edu.eg';
-const BACKUP_CHECK_INTERVAL = 60000; // Check every minute
 
-// Application State - add these variables
-let backupQueue = [];
-let isBackupInProgress = false;
-let backupCheckTimer = null;
-let isOnline = navigator.onLine;
+// Constants for email backup
+const EMAIL_RECIPIENT = '231249@med.asu.edu.eg';
+const EMAIL_API_TOKEN = 'mlsn.11f0e512bd20db09b634ebaea6c0706f76e94b7955a2e34d0c2dd123ce53e9ce';
+const EMAIL_API_URL = 'https://api.mailersend.com/v1/email';
+const CHECK_CONNECTION_INTERVAL = 60000; // Check connection every minute
 
-// Add event listeners for online/offline status
-window.addEventListener('online', handleOnlineStatusChange);
-window.addEventListener('offline', handleOnlineStatusChange);
+// Email backup queue management
+let emailBackupQueue = [];
+let lastBackupTime = null;
+let isProcessingQueue = false;
+let networkStatus = 'unknown'; // 'online', 'offline', 'unknown'
 
-// Initialize backup system
+// Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
-    // Add to existing DOMContentLoaded listener
     console.log("DOM fully loaded");
+    
+    // Load saved data
     loadSessionsFromStorage();
     loadBackupQueueFromStorage();
+    loadLastBackupTime();
     checkForRecoverableSession();
     updateHistoryView();
-    updateBackupStatus();
-    startBackupChecker();
+    setupBackupUI();
     
     // Check if jsQR is already defined (from the script tag in HTML)
     if (typeof jsQR === 'function') {
@@ -374,251 +375,368 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         console.log("jsQR not detected, will attempt to load");
         loadJsQR()
-        .then(() => console.log("jsQR library loaded and ready"))
-        .catch(error => {
-            console.error("Error loading jsQR:", error);
-            alert("Failed to load QR code scanning library. Please check your files and try again.");
-        });
+            .then(() => console.log("jsQR library loaded and ready"))
+            .catch(error => {
+                console.error("Error loading jsQR:", error);
+                alert("Failed to load QR code scanning library. Please check your files and try again.");
+            });
     }
     
     // Add beforeunload event listener to prevent accidental closing during active session
     window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Setup network status listeners
+    setupNetworkListeners();
+    
+    // Start periodic connection check for backup processing
+    startConnectionChecks();
 });
-// Handle online/offline status changes
-function handleOnlineStatusChange(event) {
-    isOnline = navigator.onLine;
-    console.log("Connection status changed:", isOnline ? "Online" : "Offline");
-    updateBackupStatus();
-    
-    if (isOnline && backupQueue.length > 0) {
-        processBackupQueue();
-    }
-}
 
-// Start the backup checker interval
-function startBackupChecker() {
-    if (backupCheckTimer) {
-        clearInterval(backupCheckTimer);
-    }
-    
-    backupCheckTimer = setInterval(() => {
-        if (isOnline && backupQueue.length > 0 && !isBackupInProgress) {
-            console.log("Backup checker triggered, processing queue...");
-            processBackupQueue();
+// Setup UI for backup status
+function setupBackupUI() {
+    // Create backup status section in settings tab or create one if it doesn't exist
+    let settingsTab = document.getElementById('settings');
+    if (!settingsTab) {
+        // Create settings tab if it doesn't exist
+        settingsTab = document.createElement('div');
+        settingsTab.id = 'settings';
+        settingsTab.className = 'tab-content';
+        document.querySelector('.container').appendChild(settingsTab);
+        
+        // Add tab button
+        const tabNav = document.querySelector('.tabs');
+        if (tabNav) {
+            const settingsTabBtn = document.createElement('button');
+            settingsTabBtn.className = 'tab';
+            settingsTabBtn.setAttribute('data-tab', 'settings');
+            settingsTabBtn.textContent = 'Settings';
+            settingsTabBtn.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(tc => tc.classList.remove('active'));
+                settingsTabBtn.classList.add('active');
+                settingsTab.classList.add('active');
+            });
+            tabNav.appendChild(settingsTabBtn);
+            tabs = document.querySelectorAll('.tab'); // Update tabs collection
         }
-    }, BACKUP_CHECK_INTERVAL);
+    }
     
-    console.log("Backup checker started");
+    // Add backup section
+    const backupSection = document.createElement('div');
+    backupSection.className = 'card';
+    backupSection.id = 'backup-section';
+    backupSection.innerHTML = `
+        <h3>Email Backup Settings</h3>
+        <div class="settings-row">
+            <label>Email Recipient:</label>
+            <input type="text" id="emailRecipient" value="${EMAIL_RECIPIENT}" readonly>
+        </div>
+        <div class="settings-row">
+            <label>Network Status:</label>
+            <span id="networkStatus">Checking...</span>
+        </div>
+        <div class="settings-row">
+            <label>Pending Backups:</label>
+            <span id="pendingBackups">${emailBackupQueue.length}</span>
+        </div>
+        <div class="settings-row">
+            <label>Last Backup:</label>
+            <span id="lastBackupTime">${lastBackupTime ? new Date(lastBackupTime).toLocaleString() : 'Never'}</span>
+        </div>
+        <div class="button-container">
+            <button id="forceBackupBtn" class="button">Force Backup Now</button>
+        </div>
+    `;
+    settingsTab.appendChild(backupSection);
+    
+    // Setup force backup button
+    document.getElementById('forceBackupBtn').addEventListener('click', forceBackupNow);
+    
+    // Update UI with current status
+    updateBackupStatusUI();
 }
 
-// Load backup queue from storage
+// Update backup status UI
+function updateBackupStatusUI() {
+    const networkStatusEl = document.getElementById('networkStatus');
+    const pendingBackupsEl = document.getElementById('pendingBackups');
+    const lastBackupTimeEl = document.getElementById('lastBackupTime');
+    
+    if (networkStatusEl) {
+        networkStatusEl.textContent = networkStatus === 'online' ? 'Connected' : 'Disconnected';
+        networkStatusEl.style.color = networkStatus === 'online' ? '#4caf50' : '#f44336';
+    }
+    
+    if (pendingBackupsEl) {
+        pendingBackupsEl.textContent = emailBackupQueue.length;
+    }
+    
+    if (lastBackupTimeEl && lastBackupTime) {
+        lastBackupTimeEl.textContent = new Date(lastBackupTime).toLocaleString();
+    }
+}
+
+// Setup network listeners
+function setupNetworkListeners() {
+    // Update network status when it changes
+    window.addEventListener('online', () => {
+        console.log('Network connection detected');
+        networkStatus = 'online';
+        updateBackupStatusUI();
+        processBackupQueue();
+    });
+    
+    window.addEventListener('offline', () => {
+        console.log('Network connection lost');
+        networkStatus = 'offline';
+        updateBackupStatusUI();
+    });
+    
+    // Check initial status
+    networkStatus = navigator.onLine ? 'online' : 'offline';
+    updateBackupStatusUI();
+}
+
+// Start periodic connection checks
+function startConnectionChecks() {
+    // Initial check
+    checkNetworkAndProcess();
+    
+    // Set interval for regular checks
+    setInterval(checkNetworkAndProcess, CHECK_CONNECTION_INTERVAL);
+}
+
+// Check network and process queue if online
+function checkNetworkAndProcess() {
+    checkNetworkStatus()
+        .then(status => {
+            networkStatus = status ? 'online' : 'offline';
+            updateBackupStatusUI();
+            
+            if (status && emailBackupQueue.length > 0) {
+                processBackupQueue();
+            }
+        })
+        .catch(err => {
+            console.error('Error checking network status:', err);
+        });
+}
+
+// Check if network is actually available
+function checkNetworkStatus() {
+    return new Promise((resolve) => {
+        // First check navigator.onLine
+        if (!navigator.onLine) {
+            resolve(false);
+            return;
+        }
+        
+        // Try to fetch a small resource to confirm actual connectivity
+        const timeoutId = setTimeout(() => resolve(false), 5000); // 5 second timeout
+        
+        fetch('https://www.google.com/favicon.ico', { 
+            mode: 'no-cors',
+            cache: 'no-store'
+        })
+            .then(() => {
+                clearTimeout(timeoutId);
+                resolve(true);
+            })
+            .catch(() => {
+                clearTimeout(timeoutId);
+                resolve(false);
+            });
+    });
+}
+
+// Force backup now (manual trigger)
+function forceBackupNow() {
+    const forceBackupBtn = document.getElementById('forceBackupBtn');
+    
+    // Check if queue is empty
+    if (emailBackupQueue.length === 0) {
+        alert('No pending backups in the queue');
+        return;
+    }
+    
+    // Disable button to prevent multiple clicks
+    forceBackupBtn.disabled = true;
+    forceBackupBtn.textContent = 'Checking connection...';
+    
+    // Check network status
+    checkNetworkStatus()
+        .then(isOnline => {
+            if (isOnline) {
+                forceBackupBtn.textContent = 'Backing up...';
+                return processBackupQueue();
+            } else {
+                alert('No internet connection available. Please try again when connected.');
+                forceBackupBtn.disabled = false;
+                forceBackupBtn.textContent = 'Force Backup Now';
+                return Promise.reject('No connection');
+            }
+        })
+        .then(() => {
+            forceBackupBtn.textContent = 'Backup Complete!';
+            setTimeout(() => {
+                forceBackupBtn.disabled = false;
+                forceBackupBtn.textContent = 'Force Backup Now';
+            }, 2000);
+        })
+        .catch(err => {
+            if (err !== 'No connection') {
+                console.error('Backup failed:', err);
+                alert('Backup failed: ' + (err.message || 'Unknown error'));
+                forceBackupBtn.disabled = false;
+                forceBackupBtn.textContent = 'Force Backup Now';
+            }
+        });
+}
+
+// Load email backup queue from storage
 function loadBackupQueueFromStorage() {
     try {
-        const savedQueue = localStorage.getItem(BACKUP_QUEUE_STORAGE_KEY);
+        const savedQueue = localStorage.getItem(EMAIL_BACKUP_QUEUE_KEY);
         if (savedQueue) {
-            backupQueue = JSON.parse(savedQueue);
-            console.log("Loaded backup queue with", backupQueue.length, "pending sessions");
-        } else {
-            backupQueue = [];
+            emailBackupQueue = JSON.parse(savedQueue);
+            console.log("Loaded backup queue with", emailBackupQueue.length, "items");
         }
     } catch (error) {
         console.error("Error loading backup queue:", error);
-        backupQueue = [];
+        emailBackupQueue = [];
     }
 }
 
-// Save backup queue to storage
+// Save email backup queue to storage
 function saveBackupQueueToStorage() {
     try {
-        localStorage.setItem(BACKUP_QUEUE_STORAGE_KEY, JSON.stringify(backupQueue));
+        localStorage.setItem(EMAIL_BACKUP_QUEUE_KEY, JSON.stringify(emailBackupQueue));
     } catch (error) {
         console.error("Error saving backup queue:", error);
     }
 }
 
-// Add session to backup queue
-function addToBackupQueue(sessionId) {
-    // Check if it's already in the queue
-    if (!backupQueue.includes(sessionId)) {
-        backupQueue.push(sessionId);
+// Load last backup time
+function loadLastBackupTime() {
+    try {
+        const savedTime = localStorage.getItem(LAST_BACKUP_TIME_KEY);
+        if (savedTime) {
+            lastBackupTime = JSON.parse(savedTime);
+        }
+    } catch (error) {
+        console.error("Error loading last backup time:", error);
+    }
+}
+
+// Save last backup time
+function saveLastBackupTime() {
+    try {
+        localStorage.setItem(LAST_BACKUP_TIME_KEY, JSON.stringify(lastBackupTime));
+    } catch (error) {
+        console.error("Error saving last backup time:", error);
+    }
+}
+
+// Add session to email backup queue
+function addToBackupQueue(session) {
+    if (!session || !session.id) return;
+    
+    // Check if session is already in queue
+    const exists = emailBackupQueue.some(item => item.id === session.id);
+    if (!exists) {
+        emailBackupQueue.push({
+            id: session.id,
+            addedAt: new Date().toISOString(),
+            attempts: 0
+        });
         saveBackupQueueToStorage();
-        updateBackupStatus();
+        updateBackupStatusUI();
         
-        // If we're online, try to process right away
-        if (isOnline && !isBackupInProgress) {
+        // Try to process the queue if we're online
+        if (networkStatus === 'online' && !isProcessingQueue) {
             processBackupQueue();
         }
     }
 }
 
-// Update the backup status in UI
-function updateBackupStatus() {
-    // Create or update status indicator in the header
-    let statusElement = document.getElementById('backupStatus');
-    
-    if (!statusElement) {
-        // Create the status indicator if it doesn't exist
-        const header = document.querySelector('header') || document.body;
-        statusElement = document.createElement('div');
-        statusElement.id = 'backupStatus';
-        statusElement.style.position = 'fixed';
-        statusElement.style.top = '10px';
-        statusElement.style.right = '10px';
-        statusElement.style.padding = '8px 12px';
-        statusElement.style.borderRadius = '4px';
-        statusElement.style.fontSize = '12px';
-        statusElement.style.fontWeight = 'bold';
-        statusElement.style.zIndex = '1000';
-        header.appendChild(statusElement);
-    }
-    
-    // Get last backup time
-    let lastBackupTime = localStorage.getItem(LAST_BACKUP_TIME_KEY);
-    let lastBackupMessage = lastBackupTime ? 
-        `Last backup: ${new Date(lastBackupTime).toLocaleString()}` : 
-        'No backups yet';
-    
-    // Update status based on connection and queue
-    if (!isOnline) {
-        statusElement.style.backgroundColor = '#f44336';
-        statusElement.style.color = 'white';
-        statusElement.innerHTML = `Offline - ${backupQueue.length} pending backups<br>${lastBackupMessage}`;
-    } else if (isBackupInProgress) {
-        statusElement.style.backgroundColor = '#ff9800';
-        statusElement.style.color = 'white';
-        statusElement.innerHTML = `Backup in progress... (${backupQueue.length} remaining)<br>${lastBackupMessage}`;
-    } else if (backupQueue.length > 0) {
-        statusElement.style.backgroundColor = '#2196f3';
-        statusElement.style.color = 'white';
-        statusElement.innerHTML = `${backupQueue.length} sessions awaiting backup<br>${lastBackupMessage}`;
-    } else {
-        statusElement.style.backgroundColor = '#4caf50';
-        statusElement.style.color = 'white';
-        statusElement.innerHTML = `All backups complete<br>${lastBackupMessage}`;
-        
-        // Auto hide after 10 seconds if everything is synchronized
-        setTimeout(() => {
-            if (backupQueue.length === 0 && !isBackupInProgress) {
-                statusElement.style.opacity = '0.5';
-            }
-        }, 10000);
-    }
-    
-    // Add force backup button if there are items in queue and we're online
-    const forceButton = document.getElementById('forceBackupBtn');
-    if (backupQueue.length > 0 && isOnline && !isBackupInProgress && !forceButton) {
-        const button = document.createElement('button');
-        button.id = 'forceBackupBtn';
-        button.textContent = 'Force Backup Now';
-        button.style.display = 'block';
-        button.style.marginTop = '5px';
-        button.style.padding = '3px 8px';
-        button.style.fontSize = '10px';
-        button.addEventListener('click', processBackupQueue);
-        statusElement.appendChild(button);
-    } else if ((backupQueue.length === 0 || !isOnline || isBackupInProgress) && forceButton) {
-        forceButton.remove();
-    }
-}
-
 // Process the backup queue
-function processBackupQueue() {
-    if (!isOnline || isBackupInProgress || backupQueue.length === 0) {
-        return;
-    }
+async function processBackupQueue() {
+    // If already processing or queue is empty, return
+    if (isProcessingQueue || emailBackupQueue.length === 0) return;
     
-    isBackupInProgress = true;
-    updateBackupStatus();
+    isProcessingQueue = true;
+    console.log("Processing backup queue with", emailBackupQueue.length, "items");
     
-    // Get the next session ID from the queue
-    const sessionId = backupQueue[0];
-    const session = sessions.find(s => s.id === sessionId);
-    
-    if (!session) {
-        // Invalid session ID, remove from queue and continue
-        backupQueue.shift();
-        saveBackupQueueToStorage();
-        isBackupInProgress = false;
-        updateBackupStatus();
-        
-        // Continue with next item if available
-        if (backupQueue.length > 0) {
-            setTimeout(processBackupQueue, 1000);
-        }
-        return;
-    }
-    
-    console.log("Processing backup for session:", session.location);
-    
-    // Create the Excel file
-    sendSessionByEmail(session)
-        .then(() => {
-            console.log("Email backup completed for session:", sessionId);
+    try {
+        // Process each item in the queue
+        for (let i = 0; i < emailBackupQueue.length; i++) {
+            const queueItem = emailBackupQueue[i];
             
-            // Update last backup time
-            localStorage.setItem(LAST_BACKUP_TIME_KEY, new Date().toISOString());
-            
-            // Remove from queue
-            backupQueue.shift();
-            saveBackupQueueToStorage();
-            
-            // Reset status
-            isBackupInProgress = false;
-            updateBackupStatus();
-            
-            // Continue with next item after a short delay
-            if (backupQueue.length > 0) {
-                setTimeout(processBackupQueue, 2000);
-            }
-        })
-        .catch(error => {
-            console.error("Backup failed:", error);
-            
-            // If it's a temporary error (like network timeout), keep in queue
-            // For permanent errors, remove from queue
-            if (error.permanent) {
-                backupQueue.shift();
-                saveBackupQueueToStorage();
+            // Find the session
+            const session = sessions.find(s => s.id === queueItem.id);
+            if (!session) {
+                console.log("Session not found for backup item:", queueItem.id);
+                emailBackupQueue.splice(i, 1);
+                i--;
+                continue;
             }
             
-            // Reset status
-            isBackupInProgress = false;
-            updateBackupStatus();
+            // Skip sessions with no scans
+            if (!session.scans || session.scans.length === 0) {
+                console.log("Skipping empty session:", session.id);
+                emailBackupQueue.splice(i, 1);
+                i--;
+                continue;
+            }
             
-            // Show notification of failure
-            const notification = document.createElement('div');
-            notification.textContent = `Backup failed: ${error.message}`;
-            notification.style.position = 'fixed';
-            notification.style.bottom = '20px';
-            notification.style.left = '50%';
-            notification.style.transform = 'translateX(-50%)';
-            notification.style.backgroundColor = '#f44336';
-            notification.style.color = 'white';
-            notification.style.padding = '10px';
-            notification.style.borderRadius = '4px';
-            notification.style.zIndex = '1001';
-            document.body.appendChild(notification);
+            // Increment attempt counter
+            queueItem.attempts++;
             
-            setTimeout(() => {
-                notification.remove();
-            }, 5000);
-            
-            // Try again later
-            setTimeout(() => {
-                if (isOnline && backupQueue.length > 0) {
-                    processBackupQueue();
+            try {
+                // Convert session to excel and get file data
+                const fileData = await sessionToExcelBase64(session);
+                
+                // Send email with attachment
+                await sendEmailWithAttachment(session, fileData);
+                
+                // Remove from queue if successful
+                console.log("Successfully backed up session:", session.id);
+                emailBackupQueue.splice(i, 1);
+                i--;
+                
+                // Update last backup time
+                lastBackupTime = new Date().toISOString();
+                saveLastBackupTime();
+            } catch (error) {
+                console.error("Failed to backup session:", session.id, error);
+                
+                // If too many attempts, remove from queue
+                if (queueItem.attempts >= 5) {
+                    console.log("Too many failed attempts, removing from queue:", queueItem.id);
+                    emailBackupQueue.splice(i, 1);
+                    i--;
                 }
-            }, 30000); // Wait 30 seconds before retry
-        });
+            }
+        }
+    } catch (error) {
+        console.error("Error processing backup queue:", error);
+    } finally {
+        isProcessingQueue = false;
+        saveBackupQueueToStorage();
+        updateBackupStatusUI();
+    }
 }
 
-// Send session by email
-function sendSessionByEmail(session) {
+// Convert session to Excel and return base64 string
+function sessionToExcelBase64(session) {
     return new Promise((resolve, reject) => {
-        console.log("Creating email backup for session:", session.id);
-        
         try {
-            // Create the Excel file in memory
+            if (!window.XLSX) {
+                reject(new Error("XLSX library not loaded"));
+                return;
+            }
+            
+            // Prepare data with modified column headers
             const data = [
                 ['Number', 'Student ID', 'Location', 'Date', 'Time']
             ];
@@ -626,8 +744,8 @@ function sendSessionByEmail(session) {
             session.scans.forEach(scan => {
                 const scanDate = new Date(scan.time);
                 data.push([
-                    scan.id,
-                    scan.content,
+                    scan.id,                // Row number
+                    scan.content,           // QR code content is now Student ID
                     session.location,
                     formatDate(scanDate),
                     formatTime(scanDate)
@@ -639,379 +757,388 @@ function sendSessionByEmail(session) {
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Scans");
             
-            // Get the Excel as ArrayBuffer
-            const excelBuffer = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-            
-            // Convert to Base64
-            const base64Excel = arrayBufferToBase64(excelBuffer);
-            
-            // Prepare email data
-            const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
-            const emailSubject = `QR Scanner Export: ${session.location} - ${session.formattedDateTime}`;
-            const emailBody = `
-                Automated backup from QR Scanner App
-                
-                Session Location: ${session.location}
-                Session Date: ${session.formattedDateTime}
-                Total Scans: ${session.scans.length}
-                
-                This email was automatically generated. Please do not reply.
-            `;
-            
-            // Use EmailJS or similar service to send the email
-            // This is a simulation since we can't directly send emails from client-side JavaScript
-            // In a real implementation, you would use a service like EmailJS, a serverless function, or a backend API
-            
-            // Simulating email API call
-            console.log("Sending email to", BACKUP_EMAIL);
-            
-            // This would be replaced with actual email sending code
-            simulateEmailSending(BACKUP_EMAIL, emailSubject, emailBody, fileName, base64Excel)
-                .then(() => {
-                    console.log("Email sent successfully");
-                    resolve();
-                })
-                .catch(error => {
-                    console.error("Email sending failed:", error);
-                    reject(new Error("Failed to send backup email: " + error.message));
-                });
+            // Generate binary string
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+            resolve(wbout);
         } catch (error) {
-            console.error("Error preparing email:", error);
-            reject(new Error("Failed to prepare backup email: " + error.message));
+            reject(error);
         }
     });
 }
 
-// Simulate email sending (replace with actual implementation)
-function simulateEmailSending(to, subject, body, fileName, fileData) {
-    return new Promise((resolve, reject) => {
-        console.log("Email would be sent with:", {to, subject, fileName});
+// Send email with attachment
+async function sendEmailWithAttachment(session, fileData) {
+    try {
+        const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
         
-        // In a real implementation, you would use a service like EmailJS:
-        // Example with EmailJS (you would need to include their library):
-        /*
-        emailjs.send("service_id", "template_id", {
-            to_email: to,
-            subject: subject,
-            message: body,
-            file_name: fileName,
-            file_data: fileData
-        }).then(
-            function(response) {
-                console.log("Email sent:", response);
-                resolve();
+        // Prepare email data
+        const emailData = {
+            from: {
+                email: "noreply@qrscanner.app",
+                name: "QR Scanner App"
             },
-            function(error) {
-                console.error("Email failed:", error);
-                reject(error);
-            }
-        );
-        */
+            to: [
+                {
+                    email: EMAIL_RECIPIENT
+                }
+            ],
+            subject: `QR Scanner Backup: ${session.location} (${session.formattedDateTime})`,
+            text: `This is an automated backup from the QR Scanner App.\n\nLocation: ${session.location}\nDate: ${session.formattedDateTime}\nNumber of scans: ${session.scans.length}\n\nThe scan data is attached as an Excel file.`,
+            attachments: [
+                {
+                    filename: fileName,
+                    content: fileData,
+                    disposition: "attachment"
+                }
+            ]
+        };
         
-        // For now, we'll simulate a successful send after a delay
-        setTimeout(() => {
-            // 90% success rate in our simulation
-            if (Math.random() < 0.9) {
-                resolve();
-            } else {
-                reject(new Error("Network timeout"));
-            }
-        }, 1500);
+        // Send email using MailerSend API
+        const response = await fetch(EMAIL_API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${EMAIL_API_TOKEN}`,
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(emailData)
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Email API error: ${response.status} ${errorText}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error("Email sending failed:", error);
+        throw error;
+    }
+}
+
+// Modified function to load jsQR from local file
+function loadJsQR() {
+    return new Promise((resolve, reject) => {
+        // Check if jsQR is already loaded
+        if (typeof jsQR === 'function') {
+            jsQRLoaded = true;
+            resolve(true);
+            return;
+        }
+        
+        // Create a new script element to load the local file
+        const script = document.createElement('script');
+        script.src = 'jsQR.min.js'; // Local file path
+        
+        // Set event handlers
+        script.onload = () => {
+            console.log("jsQR loaded successfully from local file");
+            jsQRLoaded = true;
+            resolve(true);
+        };
+        script.onerror = (error) => {
+            console.error("Failed to load local jsQR:", error);
+            reject(error);
+        };
+        
+        // Add the script to the document
+        document.head.appendChild(script);
     });
 }
 
-// Convert ArrayBuffer to Base64
-function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-}
-// Modified function to load jsQR from local file
-function loadJsQR() {
-return new Promise((resolve, reject) => {
-// Check if jsQR is already loaded
-if (typeof jsQR === 'function') {
-jsQRLoaded = true;
-resolve(true);
-return;
-}
-// Create a new script element to load the local file
-const script = document.createElement('script');
-script.src = 'jsQR.min.js'; // Local file path
-// Set event handlers
-script.onload = () => {
-console.log("jsQR loaded successfully from local file");
-jsQRLoaded = true;
-resolve(true);
-};
-script.onerror = (error) => {
-console.error("Failed to load local jsQR:", error);
-reject(error);
-};
-// Add the script to the document
-document.head.appendChild(script);
-});
-}
 // Register Service Worker for PWA functionality
 if ('serviceWorker' in navigator) {
-window.addEventListener('load', () => {
-navigator.serviceWorker.register('sw.js')
-.then(registration => {
-console.log('ServiceWorker registration successful with scope: ', registration.scope);
-})
-.catch(err => {
-console.log('ServiceWorker registration failed: ', err);
-});
-});
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+            .then(registration => {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            })
+            .catch(err => {
+                console.log('ServiceWorker registration failed: ', err);
+            });
+    });
 }
+
 // Tab Navigation
 tabs.forEach(tab => {
-tab.addEventListener('click', () => {
-const tabId = tab.getAttribute('data-tab');
-tabs.forEach(t => t.classList.remove('active'));
-tabContents.forEach(tc => tc.classList.remove('active'));
-tab.classList.add('active');
-document.getElementById(tabId).classList.add('active');
+    tab.addEventListener('click', () => {
+        const tabId = tab.getAttribute('data-tab');
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+    });
 });
-});
+
 // Start Session Button
 startSessionBtn.addEventListener('click', () => {
-// Before showing the modal, verify if jsQR is loaded
-if (!jsQRLoaded) {
-loadJsQR()
-.then(() => {
-sessionModal.style.display = 'block';
-locationInput.focus();
-})
-.catch(() => {
-alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
+    // Before showing the modal, verify if jsQR is loaded
+    if (!jsQRLoaded) {
+        loadJsQR()
+            .then(() => {
+                sessionModal.style.display = 'block';
+                locationInput.focus();
+            })
+            .catch(() => {
+                alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
+            });
+    } else {
+        sessionModal.style.display = 'block';
+        locationInput.focus();
+    }
 });
-} else {
-sessionModal.style.display = 'block';
-locationInput.focus();
-}
-});
+
 // Close Modal
 closeModalBtn.addEventListener('click', () => {
-sessionModal.style.display = 'none';
+    sessionModal.style.display = 'none';
 });
+
 // Start new scanning session
 confirmSessionBtn.addEventListener('click', () => {
-const location = locationInput.value.trim();
-if (!location) {
-alert('Please enter a location');
-return;
-}
-// Hide modal
-sessionModal.style.display = 'none';
-// Create new session
-const now = new Date();
-const sessionId = `session_${now.getTime()}`;
-const formattedDateTime = formatDateTime(now);
-activeSession = {
-id: sessionId,
-location: location,
-dateTime: now.toISOString(),
-formattedDateTime: formattedDateTime,
-scans: [],
-inProgress: true // Flag to indicate session is in progress
-};
-// Add the session to the completed sessions array immediately
-// This ensures it's in history even if app crashes
-sessions.push(activeSession);
-// Save the session index for recovery purposes
-localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
-// Update UI
-currentLocation.textContent = location;
-currentDateTime.textContent = formattedDateTime;
-sessionInfo.style.display = 'block';
-// Start camera
-startCamera();
-// Clear previous results
-resultBody.innerHTML = '';
-resultTable.style.display = 'none';
-noScansMessage.style.display = 'block';
-// Start auto-save interval
-startAutoSave();
-// Save all sessions to storage
-saveSessionsToStorage();
-// Save the active session separately for recovery
-saveActiveSession();
-// Update button
-startSessionBtn.textContent = 'End Session';
-startSessionBtn.removeEventListener('click', startSessionBtnHandler);
-startSessionBtn.addEventListener('click', endSessionHandler);
-// Update history view to show the new session
-updateHistoryView();
+    const location = locationInput.value.trim();
+    if (!location) {
+        alert('Please enter a location');
+        return;
+    }
+    
+    // Hide modal
+    sessionModal.style.display = 'none';
+    
+    // Create new session
+    const now = new Date();
+    const sessionId = `session_${now.getTime()}`;
+    const formattedDateTime = formatDateTime(now);
+    
+    activeSession = {
+        id: sessionId,
+        location: location,
+        dateTime: now.toISOString(),
+        formattedDateTime: formattedDateTime,
+        scans: [],
+        inProgress: true // Flag to indicate session is in progress
+    };
+    
+    // Add the session to the completed sessions array immediately
+    // This ensures it's in history even if app crashes
+    sessions.push(activeSession);
+    
+    // Save the session index for recovery purposes
+    localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
+    
+    // Update UI
+    currentLocation.textContent = location;
+    currentDateTime.textContent = formattedDateTime;
+    sessionInfo.style.display = 'block';
+    
+    // Start camera
+    startCamera();
+    
+    // Clear previous results
+    resultBody.innerHTML = '';
+    resultTable.style.display = 'none';
+    noScansMessage.style.display = 'block';
+    
+    // Start auto-save interval
+    startAutoSave();
+    
+    // Save all sessions to storage
+    saveSessionsToStorage();
+    
+    // Save the active session separately for recovery
+    saveActiveSession();
+    
+    // Update button
+    startSessionBtn.textContent = 'End Session';
+    startSessionBtn.removeEventListener('click', startSessionBtnHandler);
+    startSessionBtn.addEventListener('click', endSessionHandler);
+    
+    // Update history view to show the new session
+    updateHistoryView();
 });
+
 // Start auto-save interval
 function startAutoSave() {
-// Clear any existing interval
-if (autoSaveInterval) {
-clearInterval(autoSaveInterval);
+    // Clear any existing interval
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+    }
+    
+    // Set new interval
+    autoSaveInterval = setInterval(() => {
+        if (activeSession) {
+            console.log("Auto-saving session data...");
+            // Save to both active session storage and the history
+            saveActiveSession();
+            saveSessionsToStorage();
+            // Update history view to reflect changes
+            updateHistoryView();
+        }
+    }, AUTO_SAVE_DELAY);
 }
-// Set new interval
-autoSaveInterval = setInterval(() => {
-if (activeSession) {
-console.log("Auto-saving session data...");
-// Save to both active session storage and the history
-saveActiveSession();
-saveSessionsToStorage();
-// Update history view to reflect changes
-updateHistoryView();
-}
-}, AUTO_SAVE_DELAY);
-}
+
 // Stop auto-save interval
 function stopAutoSave() {
-if (autoSaveInterval) {
-clearInterval(autoSaveInterval);
-autoSaveInterval = null;
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        autoSaveInterval = null;
+    }
 }
-}
+
 // Improved camera initialization function
 async function startCamera() {
-try {
-// Create scanner UI elements
-setupScannerUI();
-// Try to get camera access
-const constraints = {
-video: {
-facingMode: 'environment',
-width: { ideal: 1280 },
-height: { ideal: 720 }
+    try {
+        // Create scanner UI elements
+        setupScannerUI();
+        
+        // Try to get camera access
+        const constraints = {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        };
+        console.log("Requesting camera access with constraints:", constraints);
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Camera access granted:", videoStream);
+        
+        // Set up video element
+        video.srcObject = videoStream;
+        video.setAttribute("playsinline", true);
+        video.onloadedmetadata = () => {
+            console.log(`Video ready: ${video.videoWidth}x${video.videoHeight}`);
+            // Set canvas dimensions to match video
+            canvasElement.width = video.videoWidth;
+            canvasElement.height = video.videoHeight;
+            
+            // Start video playback
+            video.play()
+                .then(() => {
+                    console.log("Video playback started");
+                    scannerPlaceholder.style.display = 'none';
+                    video.style.display = 'block';
+                    
+                    // Start scanning
+                    scanning = true;
+                    requestAnimationFrame(scanQRCode);
+                    
+                    // Show scanning indicator
+                    updateScanStatus('Camera active - looking for QR codes');
+                })
+                .catch(error => {
+                    console.error("Video playback failed:", error);
+                    alert("Failed to start video playback. Please try again.");
+                });
+        };
+    } catch (error) {
+        console.error("Camera access error:", error);
+        alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
+    }
 }
-};
-console.log("Requesting camera access with constraints:", constraints);
-videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-console.log("Camera access granted:", videoStream);
-// Set up video element
-video.srcObject = videoStream;
-video.setAttribute("playsinline", true);
-video.onloadedmetadata = () => {
-console.log(`Video ready: ${video.videoWidth}x${video.videoHeight}`);
-// Set canvas dimensions to match video
-canvasElement.width = video.videoWidth;
-canvasElement.height = video.videoHeight;
-// Start video playback
-video.play()
-.then(() => {
-console.log("Video playback started");
-scannerPlaceholder.style.display = 'none';
-video.style.display = 'block';
-// Start scanning
-scanning = true;
-requestAnimationFrame(scanQRCode);
-// Show scanning indicator
-updateScanStatus('Camera active - looking for QR codes');
-})
-.catch(error => {
-console.error("Video playback failed:", error);
-alert("Failed to start video playback. Please try again.");
-});
-};
-} catch (error) {
-console.error("Camera access error:", error);
-alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
-}
-}
+
 // Set up scanner UI elements
 function setupScannerUI() {
-// Remove any existing UI elements first
-const oldElements = document.querySelectorAll('.scanner-ui');
-oldElements.forEach(el => el.remove());
-// Add scan frame indicator
-const scanFrame = document.createElement('div');
-scanFrame.className = 'scanner-ui';
-scanFrame.id = 'scan-frame';
-scanFrame.style.position = 'absolute';
-scanFrame.style.top = '50%';
-scanFrame.style.left = '50%';
-scanFrame.style.transform = 'translate(-50%, -50%)';
-scanFrame.style.width = '200px';
-scanFrame.style.height = '200px';
-scanFrame.style.border = '2px solid #24325f';
-scanFrame.style.borderRadius = '10px';
-scanFrame.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
-scanFrame.style.zIndex = '99';
-document.querySelector('.scanner-container').appendChild(scanFrame);
-// Add status text
-const statusText = document.createElement('div');
-statusText.className = 'scanner-ui';
-statusText.id = 'scan-status';
-statusText.style.position = 'absolute';
-statusText.style.bottom = '10px';
-statusText.style.left = '50%';
-statusText.style.transform = 'translateX(-50%)';
-statusText.style.backgroundColor = 'rgba(0,0,0,0.7)';
-statusText.style.color = 'white';
-statusText.style.padding = '8px 16px';
-statusText.style.borderRadius = '20px';
-statusText.style.zIndex = '100';
-statusText.textContent = 'Starting camera...';
-document.querySelector('.scanner-container').appendChild(statusText);
-// Add scan log panel
-const scanLogPanel = document.createElement('div');
-scanLogPanel.className = 'scanner-ui';
-scanLogPanel.id = 'scan-log';
-scanLogPanel.style.position = 'absolute';
-scanLogPanel.style.top = '10px';
-scanLogPanel.style.right = '10px';
-scanLogPanel.style.width = '250px';
-scanLogPanel.style.maxHeight = '150px';
-scanLogPanel.style.overflowY = 'auto';
-scanLogPanel.style.backgroundColor = 'rgba(0,0,0,0.7)';
-scanLogPanel.style.color = 'white';
-scanLogPanel.style.padding = '8px';
-scanLogPanel.style.borderRadius = '8px';
-scanLogPanel.style.fontSize = '14px';
-scanLogPanel.style.zIndex = '100';
-scanLogPanel.innerHTML = '<div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Scan Log</div>';
-document.querySelector('.scanner-container').appendChild(scanLogPanel);
-// Keep canvas in the DOM but make it invisible
-// This is crucial for QR detection to work
-canvasElement.className = 'scanner-ui';
-canvasElement.style.position = 'absolute';
-canvasElement.style.top = '0';
-canvasElement.style.left = '0';
-canvasElement.style.width = '100%';
-canvasElement.style.height = '100%';
-canvasElement.style.display = 'none'; // Hide but keep in DOM
-document.querySelector('.scanner-container').appendChild(canvasElement);
+    // Remove any existing UI elements first
+    const oldElements = document.querySelectorAll('.scanner-ui');
+    oldElements.forEach(el => el.remove());
+    
+    // Add scan frame indicator
+    const scanFrame = document.createElement('div');
+    scanFrame.className = 'scanner-ui';
+    scanFrame.id = 'scan-frame';
+    scanFrame.style.position = 'absolute';
+    scanFrame.style.top = '50%';
+    scanFrame.style.left = '50%';
+    scanFrame.style.transform = 'translate(-50%, -50%)';
+    scanFrame.style.width = '200px';
+    scanFrame.style.height = '200px';
+    scanFrame.style.border = '2px solid #24325f';
+    scanFrame.style.borderRadius = '10px';
+    scanFrame.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
+    scanFrame.style.zIndex = '99';
+    document.querySelector('.scanner-container').appendChild(scanFrame);
+    
+    // Add status text
+    const statusText = document.createElement('div');
+    statusText.className = 'scanner-ui';
+    statusText.id = 'scan-status';
+    statusText.style.position = 'absolute';
+    statusText.style.bottom = '10px';
+    statusText.style.left = '50%';
+    statusText.style.transform = 'translateX(-50%)';
+    statusText.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    statusText.style.color = 'white';
+    statusText.style.padding = '8px 16px';
+    statusText.style.borderRadius = '20px';
+    statusText.style.zIndex = '100';
+    statusText.textContent = 'Starting camera...';
+    document.querySelector('.scanner-container').appendChild(statusText);
+    
+    // Add scan log panel
+    const scanLogPanel = document.createElement('div');
+    scanLogPanel.className = 'scanner-ui';
+    scanLogPanel.id = 'scan-log';
+    scanLogPanel.style.position = 'absolute';
+    scanLogPanel.style.top = '10px';
+    scanLogPanel.style.right = '10px';
+    scanLogPanel.style.width = '250px';
+    scanLogPanel.style.maxHeight = '150px';
+    scanLogPanel.style.overflowY = 'auto';
+    scanLogPanel.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    scanLogPanel.style.color = 'white';
+    scanLogPanel.style.padding = '8px';
+    scanLogPanel.style.borderRadius = '8px';
+    scanLogPanel.style.fontSize = '14px';
+    scanLogPanel.style.zIndex = '100';
+    scanLogPanel.innerHTML = '<div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Scan Log</div>';
+    document.querySelector('.scanner-container').appendChild(scanLogPanel);
+    
+    // Keep canvas in the DOM but make it invisible
+    // This is crucial for QR detection to work
+    canvasElement.className = 'scanner-ui';
+    canvasElement.style.position = 'absolute';
+    canvasElement.style.top = '0';
+    canvasElement.style.left = '0';
+    canvasElement.style.width = '100%';
+    canvasElement.style.height = '100%';
+    canvasElement.style.display = 'none'; // Hide but keep in DOM
+    document.querySelector('.scanner-container').appendChild(canvasElement);
 }
+
 // Add a log entry to the scan log
 function addScanLogEntry(message, type = 'info') {
-const scanLog = document.getElementById('scan-log');
-if (scanLog) {
-const entry = document.createElement('div');
-entry.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
-entry.style.padding = '4px 0';
-entry.style.fontSize = '12px';
-// Color code by type
-if (type === 'success') {
-entry.style.color = '#4caf50';
-} else if (type === 'error') {
-entry.style.color = '#f44336';
-} else if (type === 'warning') {
-entry.style.color = '#ff9800';
+    const scanLog = document.getElementById('scan-log');
+    if (scanLog) {
+        const entry = document.createElement('div');
+        entry.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
+        entry.style.padding = '4px 0';
+        entry.style.fontSize = '12px';
+        
+        // Color code by type
+        if (type === 'success') {
+            entry.style.color = '#4caf50';
+        } else if (type === 'error') {
+            entry.style.color = '#f44336';
+        } else if (type === 'warning') {
+            entry.style.color = '#ff9800';
+        }
+        
+        // Add timestamp
+        const now = new Date();
+        const timestamp = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
+        entry.innerHTML = `<small>${timestamp}</small> ${message}`;
+        scanLog.appendChild(entry);
+        
+        // Scroll to bottom
+        scanLog.scrollTop = scanLog.scrollHeight;
+        
+        // Limit entries to keep performance good
+        while (scanLog.children.length > 20) {
+            scanLog.removeChild(scanLog.children[1]); // Keep the header
+        }
+    }
 }
-// Add timestamp
-const now = new Date();
-const timestamp = `${padZero(now.getHours())}:${padZero(now.getMinutes())}:${padZero(now.getSeconds())}`;
-entry.innerHTML = `<small>${timestamp}</small> ${message}`;
-scanLog.appendChild(entry);
-// Scroll to bottom
-scanLog.scrollTop = scanLog.scrollHeight;
-// Limit entries to keep performance good
-while (scanLog.children.length > 20) {
-scanLog.removeChild(scanLog.children[1]); // Keep the header
-}
-}
-}
+
 // Highlight QR code when found
 function highlightQR(location) {
 const frame = document.getElementById('scan-frame');
@@ -1162,49 +1289,47 @@ addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}
 }
 // End current scanning session
 function endSessionHandler() {
-    if (scanning) {
-        scanning = false;
-        // Stop auto-save
-        stopAutoSave();
-        // Stop camera
-        if (videoStream) {
-            videoStream.getTracks().forEach(track => track.stop());
-            videoStream = null;
-        }
-        // Update UI
-        video.style.display = 'none';
-        scannerPlaceholder.style.display = 'block';
-        // Clean up UI elements
-        const scannerUI = document.querySelectorAll('.scanner-ui');
-        scannerUI.forEach(el => el.remove());
-        // Update session status in the array
-        const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
-        if (sessionIndex !== -1) {
-            // Update the session to mark it as completed
-            sessions[sessionIndex].inProgress = false;
-            // Save to storage
-            saveSessionsToStorage();
-            // Update history view
-            updateHistoryView();
-            // Auto-export this session
-            exportSession(sessions[sessionIndex]);
-            // Add to backup queue for email export
-            addToBackupQueue(sessions[sessionIndex].id);
-        }
-        // Clear the active session storage
-        clearActiveSession();
-        // Clear the temp session index
-        localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
-        // Reset UI
-        sessionInfo.style.display = 'none';
-        startSessionBtn.textContent = 'Start Scanning Session';
-        startSessionBtn.removeEventListener('click', endSessionHandler);
-        startSessionBtn.addEventListener('click', startSessionBtnHandler);
-        // Show confirmation
-        alert('Session completed and exported successfully!');
-        // Reset active session
-        activeSession = null;
-    }
+if (scanning) {
+scanning = false;
+// Stop auto-save
+stopAutoSave();
+// Stop camera
+if (videoStream) {
+videoStream.getTracks().forEach(track => track.stop());
+videoStream = null;
+}
+// Update UI
+video.style.display = 'none';
+scannerPlaceholder.style.display = 'block';
+// Clean up UI elements
+const scannerUI = document.querySelectorAll('.scanner-ui');
+scannerUI.forEach(el => el.remove());
+// Update session status in the array
+const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+if (sessionIndex !== -1) {
+// Update the session to mark it as completed
+sessions[sessionIndex].inProgress = false;
+// Save to storage
+saveSessionsToStorage();
+// Update history view
+updateHistoryView();
+// Auto-export this session
+exportSession(sessions[sessionIndex]);
+}
+// Clear the active session storage
+clearActiveSession();
+// Clear the temp session index
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+// Reset UI
+sessionInfo.style.display = 'none';
+startSessionBtn.textContent = 'Start Scanning Session';
+startSessionBtn.removeEventListener('click', endSessionHandler);
+startSessionBtn.addEventListener('click', startSessionBtnHandler);
+// Show confirmation
+alert('Session completed and exported successfully!');
+// Reset active session
+activeSession = null;
+}
 }
 // Handler for start session button
 function startSessionBtnHandler() {
@@ -1333,126 +1458,6 @@ console.error("Error checking for recoverable session:", error);
 clearActiveSession();
 localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
 }
-}
-// Add HTML for backup management to history tab
-function addBackupManagementUI() {
-    const historyTab = document.getElementById('history');
-    if (!historyTab || document.getElementById('backupManagement')) return;
-    
-    // Create backup management container
-    const backupManagement = document.createElement('div');
-    backupManagement.id = 'backupManagement';
-    backupManagement.className = 'card';
-    backupManagement.style.marginBottom = '20px';
-    
-    backupManagement.innerHTML = `
-        <h3>Email Backup Management</h3>
-        <p>All completed sessions will be automatically backed up to ${BACKUP_EMAIL} when internet connection is available.</p>
-        <div class="flex-between">
-            <button id="manualBackupBtn" class="button">Force Backup Now</button>
-            <span id="queueStatus">Loading queue status...</span>
-        </div>
-    `;
-    
-    // Insert at the top of history tab
-    historyTab.insertBefore(backupManagement, historyTab.firstChild);
-    
-    // Add event listener for manual backup button
-    document.getElementById('manualBackupBtn').addEventListener('click', function() {
-        if (!isOnline) {
-            alert('You are currently offline. Please connect to the internet to backup sessions.');
-            return;
-        }
-        
-        if (backupQueue.length === 0) {
-            // If no sessions in queue, ask if user wants to queue all completed sessions
-            const confirmResult = confirm('There are no sessions in the backup queue. Would you like to add all completed sessions to the queue?');
-            if (confirmResult) {
-                // Add all completed sessions to queue
-                sessions.forEach(session => {
-                    if (!session.inProgress) {
-                        addToBackupQueue(session.id);
-                    }
-                });
-            }
-        } else {
-            // Start processing the queue
-            processBackupQueue();
-        }
-    });
-    
-    // Update queue status
-    updateQueueStatus();
-}
-
-// Update queue status in backup management UI
-function updateQueueStatus() {
-    const queueStatus = document.getElementById('queueStatus');
-    if (queueStatus) {
-        queueStatus.textContent = `${backupQueue.length} sessions pending backup`;
-    }
-}
-
-// Add to the history tab function to include backup management UI
-function updateHistoryView() {
-    if (sessions.length === 0) {
-        historyList.innerHTML = '<p class="no-results">No scanning sessions found.</p>';
-        return;
-    }
-    
-    // Add backup management UI
-    addBackupManagementUI();
-    
-    // Sort sessions based on selected option
-    const sortValue = sortBy.value;
-    const sortedSessions = [...sessions].sort((a, b) => {
-        if (sortValue === 'date-desc') {
-            return new Date(b.dateTime) - new Date(a.dateTime);
-        } else if (sortValue === 'date-asc') {
-            return new Date(a.dateTime) - new Date(b.dateTime);
-        } else if (sortValue === 'location') {
-            return a.location.localeCompare(b.location);
-        }
-        return 0;
-    });
-    
-    // Generate HTML
-    historyList.innerHTML = '';
-    sortedSessions.forEach(session => {
-        const card = document.createElement('div');
-        card.className = 'card history-item';
-        card.setAttribute('data-id', session.id);
-        // Add class to indicate in-progress sessions
-        if (session.inProgress) {
-            card.classList.add('in-progress');
-            card.style.borderLeft = '4px solid #FF3B58';
-        }
-        
-        // Check if in backup queue
-        const inBackupQueue = backupQueue.includes(session.id);
-        const backupIndicator = inBackupQueue ? 
-            '<span style="background-color: #2196f3; color: white; font-size: 12px; padding: 2px 6px; border-radius: 10px; margin-left: 5px;">Backup Pending</span>' : '';
-        
-        card.innerHTML = `
-            <div class="flex-between">
-                <div>
-                    <h3>${escapeHtml(session.location)}${session.inProgress ? ' <span style="color:#FF3B58">(In Progress)</span>' : ''}</h3>
-                    <p>${session.formattedDateTime}</p>
-                </div>
-                <div>
-                    <p><strong>${session.scans.length}</strong> scans ${backupIndicator}</p>
-                </div>
-            </div>
-        `;
-        card.addEventListener('click', () => {
-            activeSessionId = session.id;
-            showSessionDetails(session);
-        });
-        historyList.appendChild(card);
-    });
-    
-    // Update queue status
-    updateQueueStatus();
 }
 // Recover active session - MODIFIED
 function recoverSession(session) {
@@ -1679,7 +1684,7 @@ console.error("XLSX library not loaded");
 alert("Export functionality is not available. Please check your internet connection.");
 return;
 }
-const fileName = `QR_${formatDateTimeForFile(new Date())}.xlsx`;
+const fileName = `QR_Scan_All_Sessions_${formatDateTimeForFile(new Date())}.xlsx`;
 const wb = XLSX.utils.book_new();
 // Counter for unique sheet names
 let sheetCounter = {};
