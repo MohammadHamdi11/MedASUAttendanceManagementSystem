@@ -344,7 +344,7 @@ const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex'; // For tracking in-p
 const BACKUP_QUEUE_STORAGE_KEY = 'qrScannerBackupQueue';
 const LAST_BACKUP_TIME_KEY = 'qrScannerLastBackupTime';
 const BACKUP_EMAIL = '231249@med.asu.edu.eg';
-const BACKUP_CHECK_INTERVAL = 86400000; // Check every minute
+const BACKUP_CHECK_INTERVAL = 60000; // Check every minute
 
 // Application State - add these variables
 let backupQueue = [];
@@ -384,7 +384,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add beforeunload event listener to prevent accidental closing during active session
     window.addEventListener('beforeunload', handleBeforeUnload);
 });
-
 // Handle online/offline status changes
 function handleOnlineStatusChange(event) {
     isOnline = navigator.onLine;
@@ -730,174 +729,6 @@ function arrayBufferToBase64(buffer) {
         binary += String.fromCharCode(bytes[i]);
     }
     return window.btoa(binary);
-}
-
-// Modify end session handler to add to backup queue
-function endSessionHandler() {
-    if (scanning) {
-        scanning = false;
-        // Stop auto-save
-        stopAutoSave();
-        // Stop camera
-        if (videoStream) {
-            videoStream.getTracks().forEach(track => track.stop());
-            videoStream = null;
-        }
-        // Update UI
-        video.style.display = 'none';
-        scannerPlaceholder.style.display = 'block';
-        // Clean up UI elements
-        const scannerUI = document.querySelectorAll('.scanner-ui');
-        scannerUI.forEach(el => el.remove());
-        // Update session status in the array
-        const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
-        if (sessionIndex !== -1) {
-            // Update the session to mark it as completed
-            sessions[sessionIndex].inProgress = false;
-            // Save to storage
-            saveSessionsToStorage();
-            // Update history view
-            updateHistoryView();
-            // Auto-export this session
-            exportSession(sessions[sessionIndex]);
-            // Add to backup queue for email export
-            addToBackupQueue(sessions[sessionIndex].id);
-        }
-        // Clear the active session storage
-        clearActiveSession();
-        // Clear the temp session index
-        localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
-        // Reset UI
-        sessionInfo.style.display = 'none';
-        startSessionBtn.textContent = 'Start Scanning Session';
-        startSessionBtn.removeEventListener('click', endSessionHandler);
-        startSessionBtn.addEventListener('click', startSessionBtnHandler);
-        // Show confirmation
-        alert('Session completed and exported successfully!');
-        // Reset active session
-        activeSession = null;
-    }
-}
-
-// Add HTML for backup management to history tab
-function addBackupManagementUI() {
-    const historyTab = document.getElementById('history');
-    if (!historyTab || document.getElementById('backupManagement')) return;
-    
-    // Create backup management container
-    const backupManagement = document.createElement('div');
-    backupManagement.id = 'backupManagement';
-    backupManagement.className = 'card';
-    backupManagement.style.marginBottom = '20px';
-    
-    backupManagement.innerHTML = `
-        <h3>Email Backup Management</h3>
-        <p>All completed sessions will be automatically backed up to ${BACKUP_EMAIL} when internet connection is available.</p>
-        <div class="flex-between">
-            <button id="manualBackupBtn" class="button">Force Backup Now</button>
-            <span id="queueStatus">Loading queue status...</span>
-        </div>
-    `;
-    
-    // Insert at the top of history tab
-    historyTab.insertBefore(backupManagement, historyTab.firstChild);
-    
-    // Add event listener for manual backup button
-    document.getElementById('manualBackupBtn').addEventListener('click', function() {
-        if (!isOnline) {
-            alert('You are currently offline. Please connect to the internet to backup sessions.');
-            return;
-        }
-        
-        if (backupQueue.length === 0) {
-            // If no sessions in queue, ask if user wants to queue all completed sessions
-            const confirmResult = confirm('There are no sessions in the backup queue. Would you like to add all completed sessions to the queue?');
-            if (confirmResult) {
-                // Add all completed sessions to queue
-                sessions.forEach(session => {
-                    if (!session.inProgress) {
-                        addToBackupQueue(session.id);
-                    }
-                });
-            }
-        } else {
-            // Start processing the queue
-            processBackupQueue();
-        }
-    });
-    
-    // Update queue status
-    updateQueueStatus();
-}
-
-// Update queue status in backup management UI
-function updateQueueStatus() {
-    const queueStatus = document.getElementById('queueStatus');
-    if (queueStatus) {
-        queueStatus.textContent = `${backupQueue.length} sessions pending backup`;
-    }
-}
-
-// Add to the history tab function to include backup management UI
-function updateHistoryView() {
-    if (sessions.length === 0) {
-        historyList.innerHTML = '<p class="no-results">No scanning sessions found.</p>';
-        return;
-    }
-    
-    // Add backup management UI
-    addBackupManagementUI();
-    
-    // Sort sessions based on selected option
-    const sortValue = sortBy.value;
-    const sortedSessions = [...sessions].sort((a, b) => {
-        if (sortValue === 'date-desc') {
-            return new Date(b.dateTime) - new Date(a.dateTime);
-        } else if (sortValue === 'date-asc') {
-            return new Date(a.dateTime) - new Date(b.dateTime);
-        } else if (sortValue === 'location') {
-            return a.location.localeCompare(b.location);
-        }
-        return 0;
-    });
-    
-    // Generate HTML
-    historyList.innerHTML = '';
-    sortedSessions.forEach(session => {
-        const card = document.createElement('div');
-        card.className = 'card history-item';
-        card.setAttribute('data-id', session.id);
-        // Add class to indicate in-progress sessions
-        if (session.inProgress) {
-            card.classList.add('in-progress');
-            card.style.borderLeft = '4px solid #FF3B58';
-        }
-        
-        // Check if in backup queue
-        const inBackupQueue = backupQueue.includes(session.id);
-        const backupIndicator = inBackupQueue ? 
-            '<span style="background-color: #2196f3; color: white; font-size: 12px; padding: 2px 6px; border-radius: 10px; margin-left: 5px;">Backup Pending</span>' : '';
-        
-        card.innerHTML = `
-            <div class="flex-between">
-                <div>
-                    <h3>${escapeHtml(session.location)}${session.inProgress ? ' <span style="color:#FF3B58">(In Progress)</span>' : ''}</h3>
-                    <p>${session.formattedDateTime}</p>
-                </div>
-                <div>
-                    <p><strong>${session.scans.length}</strong> scans ${backupIndicator}</p>
-                </div>
-            </div>
-        `;
-        card.addEventListener('click', () => {
-            activeSessionId = session.id;
-            showSessionDetails(session);
-        });
-        historyList.appendChild(card);
-    });
-    
-    // Update queue status
-    updateQueueStatus();
 }
 // Modified function to load jsQR from local file
 function loadJsQR() {
@@ -1331,47 +1162,49 @@ addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}
 }
 // End current scanning session
 function endSessionHandler() {
-if (scanning) {
-scanning = false;
-// Stop auto-save
-stopAutoSave();
-// Stop camera
-if (videoStream) {
-videoStream.getTracks().forEach(track => track.stop());
-videoStream = null;
-}
-// Update UI
-video.style.display = 'none';
-scannerPlaceholder.style.display = 'block';
-// Clean up UI elements
-const scannerUI = document.querySelectorAll('.scanner-ui');
-scannerUI.forEach(el => el.remove());
-// Update session status in the array
-const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
-if (sessionIndex !== -1) {
-// Update the session to mark it as completed
-sessions[sessionIndex].inProgress = false;
-// Save to storage
-saveSessionsToStorage();
-// Update history view
-updateHistoryView();
-// Auto-export this session
-exportSession(sessions[sessionIndex]);
-}
-// Clear the active session storage
-clearActiveSession();
-// Clear the temp session index
-localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
-// Reset UI
-sessionInfo.style.display = 'none';
-startSessionBtn.textContent = 'Start Scanning Session';
-startSessionBtn.removeEventListener('click', endSessionHandler);
-startSessionBtn.addEventListener('click', startSessionBtnHandler);
-// Show confirmation
-alert('Session completed and exported successfully!');
-// Reset active session
-activeSession = null;
-}
+    if (scanning) {
+        scanning = false;
+        // Stop auto-save
+        stopAutoSave();
+        // Stop camera
+        if (videoStream) {
+            videoStream.getTracks().forEach(track => track.stop());
+            videoStream = null;
+        }
+        // Update UI
+        video.style.display = 'none';
+        scannerPlaceholder.style.display = 'block';
+        // Clean up UI elements
+        const scannerUI = document.querySelectorAll('.scanner-ui');
+        scannerUI.forEach(el => el.remove());
+        // Update session status in the array
+        const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+        if (sessionIndex !== -1) {
+            // Update the session to mark it as completed
+            sessions[sessionIndex].inProgress = false;
+            // Save to storage
+            saveSessionsToStorage();
+            // Update history view
+            updateHistoryView();
+            // Auto-export this session
+            exportSession(sessions[sessionIndex]);
+            // Add to backup queue for email export
+            addToBackupQueue(sessions[sessionIndex].id);
+        }
+        // Clear the active session storage
+        clearActiveSession();
+        // Clear the temp session index
+        localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+        // Reset UI
+        sessionInfo.style.display = 'none';
+        startSessionBtn.textContent = 'Start Scanning Session';
+        startSessionBtn.removeEventListener('click', endSessionHandler);
+        startSessionBtn.addEventListener('click', startSessionBtnHandler);
+        // Show confirmation
+        alert('Session completed and exported successfully!');
+        // Reset active session
+        activeSession = null;
+    }
 }
 // Handler for start session button
 function startSessionBtnHandler() {
@@ -1500,6 +1333,126 @@ console.error("Error checking for recoverable session:", error);
 clearActiveSession();
 localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
 }
+}
+// Add HTML for backup management to history tab
+function addBackupManagementUI() {
+    const historyTab = document.getElementById('history');
+    if (!historyTab || document.getElementById('backupManagement')) return;
+    
+    // Create backup management container
+    const backupManagement = document.createElement('div');
+    backupManagement.id = 'backupManagement';
+    backupManagement.className = 'card';
+    backupManagement.style.marginBottom = '20px';
+    
+    backupManagement.innerHTML = `
+        <h3>Email Backup Management</h3>
+        <p>All completed sessions will be automatically backed up to ${BACKUP_EMAIL} when internet connection is available.</p>
+        <div class="flex-between">
+            <button id="manualBackupBtn" class="button">Force Backup Now</button>
+            <span id="queueStatus">Loading queue status...</span>
+        </div>
+    `;
+    
+    // Insert at the top of history tab
+    historyTab.insertBefore(backupManagement, historyTab.firstChild);
+    
+    // Add event listener for manual backup button
+    document.getElementById('manualBackupBtn').addEventListener('click', function() {
+        if (!isOnline) {
+            alert('You are currently offline. Please connect to the internet to backup sessions.');
+            return;
+        }
+        
+        if (backupQueue.length === 0) {
+            // If no sessions in queue, ask if user wants to queue all completed sessions
+            const confirmResult = confirm('There are no sessions in the backup queue. Would you like to add all completed sessions to the queue?');
+            if (confirmResult) {
+                // Add all completed sessions to queue
+                sessions.forEach(session => {
+                    if (!session.inProgress) {
+                        addToBackupQueue(session.id);
+                    }
+                });
+            }
+        } else {
+            // Start processing the queue
+            processBackupQueue();
+        }
+    });
+    
+    // Update queue status
+    updateQueueStatus();
+}
+
+// Update queue status in backup management UI
+function updateQueueStatus() {
+    const queueStatus = document.getElementById('queueStatus');
+    if (queueStatus) {
+        queueStatus.textContent = `${backupQueue.length} sessions pending backup`;
+    }
+}
+
+// Add to the history tab function to include backup management UI
+function updateHistoryView() {
+    if (sessions.length === 0) {
+        historyList.innerHTML = '<p class="no-results">No scanning sessions found.</p>';
+        return;
+    }
+    
+    // Add backup management UI
+    addBackupManagementUI();
+    
+    // Sort sessions based on selected option
+    const sortValue = sortBy.value;
+    const sortedSessions = [...sessions].sort((a, b) => {
+        if (sortValue === 'date-desc') {
+            return new Date(b.dateTime) - new Date(a.dateTime);
+        } else if (sortValue === 'date-asc') {
+            return new Date(a.dateTime) - new Date(b.dateTime);
+        } else if (sortValue === 'location') {
+            return a.location.localeCompare(b.location);
+        }
+        return 0;
+    });
+    
+    // Generate HTML
+    historyList.innerHTML = '';
+    sortedSessions.forEach(session => {
+        const card = document.createElement('div');
+        card.className = 'card history-item';
+        card.setAttribute('data-id', session.id);
+        // Add class to indicate in-progress sessions
+        if (session.inProgress) {
+            card.classList.add('in-progress');
+            card.style.borderLeft = '4px solid #FF3B58';
+        }
+        
+        // Check if in backup queue
+        const inBackupQueue = backupQueue.includes(session.id);
+        const backupIndicator = inBackupQueue ? 
+            '<span style="background-color: #2196f3; color: white; font-size: 12px; padding: 2px 6px; border-radius: 10px; margin-left: 5px;">Backup Pending</span>' : '';
+        
+        card.innerHTML = `
+            <div class="flex-between">
+                <div>
+                    <h3>${escapeHtml(session.location)}${session.inProgress ? ' <span style="color:#FF3B58">(In Progress)</span>' : ''}</h3>
+                    <p>${session.formattedDateTime}</p>
+                </div>
+                <div>
+                    <p><strong>${session.scans.length}</strong> scans ${backupIndicator}</p>
+                </div>
+            </div>
+        `;
+        card.addEventListener('click', () => {
+            activeSessionId = session.id;
+            showSessionDetails(session);
+        });
+        historyList.appendChild(card);
+    });
+    
+    // Update queue status
+    updateQueueStatus();
 }
 // Recover active session - MODIFIED
 function recoverSession(session) {
@@ -1726,7 +1679,7 @@ console.error("XLSX library not loaded");
 alert("Export functionality is not available. Please check your internet connection.");
 return;
 }
-const fileName = `QR_Scan_All_Sessions_${formatDateTimeForFile(new Date())}.xlsx`;
+const fileName = `QR_${formatDateTimeForFile(new Date())}.xlsx`;
 const wb = XLSX.utils.book_new();
 // Counter for unique sheet names
 let sheetCounter = {};
