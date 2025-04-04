@@ -376,47 +376,101 @@ console.log('ServiceWorker registration failed: ', err);
 }
 // Start new scanning session
 confirmSessionBtn.addEventListener('click', async () => {
-const location = locationInput.value.trim();
-if (!location) {
-alert('Please enter a location');
-return;
-}
-// Hide modal
-sessionModal.style.display = 'none';
-// Create new session
-const now = new Date();
-const sessionId = `session_${now.getTime()}`;
-const formattedDateTime = formatDateTime(now);
-activeSession = {
-id: sessionId,
-location: location,
-dateTime: now.toISOString(),
-formattedDateTime: formattedDateTime,
-scans: []
-};
-// Update UI
-currentLocation.textContent = location;
-currentDateTime.textContent = formattedDateTime;
-sessionInfo.style.display = 'block';
-// Start camera
-await startScanner();
-// Clear previous results
-resultBody.innerHTML = '';
-resultTable.style.display = 'none';
-noScansMessage.style.display = 'block';
-// Update button
-startSessionBtn.textContent = 'End Session';
-startSessionBtn.removeEventListener('click', startSessionBtnHandler);
-startSessionBtn.addEventListener('click', endSessionHandler);
+  const location = locationInput.value.trim();
+  if (!location) {
+    alert('Please enter a location');
+    return;
+  }
+  
+  // Hide modal
+  sessionModal.style.display = 'none';
+  
+  // Create new session
+  const now = new Date();
+  const sessionId = `session_${now.getTime()}`;
+  const formattedDateTime = formatDateTime(now);
+  activeSession = {
+    id: sessionId,
+    location: location,
+    dateTime: now.toISOString(),
+    formattedDateTime: formattedDateTime,
+    scans: []
+  };
+  
+  // Update UI
+  currentLocation.textContent = location;
+  currentDateTime.textContent = formattedDateTime;
+  sessionInfo.style.display = 'block';
+  
+  // Start camera with verification
+  await startSessionWithVerification();
+  
+  // Clear previous results
+  resultBody.innerHTML = '';
+  resultTable.style.display = 'none';
+  noScansMessage.style.display = 'block';
+  
+  // Update button
+  startSessionBtn.textContent = 'End Session';
+  startSessionBtn.removeEventListener('click', startSessionBtnHandler);
+  startSessionBtn.addEventListener('click', endSessionHandler);
 });
-// Start scanner function
+// First, let's modify how we set up the canvas and video elements
+function setupScannerElements() {
+  // Make the canvas visible for debugging
+  canvasElement.style.display = 'block';
+  canvasElement.style.position = 'absolute';
+  canvasElement.style.top = '10px';
+  canvasElement.style.right = '10px';
+  canvasElement.style.width = '100px';
+  canvasElement.style.height = '100px';
+  canvasElement.style.border = '2px solid red';
+  canvasElement.style.zIndex = '999';
+  document.querySelector('.scanner-container').appendChild(canvasElement);
+  
+  // Add scanning indicator
+  const scanIndicator = document.createElement('div');
+  scanIndicator.id = 'scan-indicator';
+  scanIndicator.style.position = 'absolute';
+  scanIndicator.style.top = '50%';
+  scanIndicator.style.left = '50%';
+  scanIndicator.style.transform = 'translate(-50%, -50%)';
+  scanIndicator.style.width = '200px';
+  scanIndicator.style.height = '200px';
+  scanIndicator.style.border = '2px solid #4CAF50';
+  scanIndicator.style.borderRadius = '10px';
+  scanIndicator.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
+  scanIndicator.style.zIndex = '998';
+  document.querySelector('.scanner-container').appendChild(scanIndicator);
+  
+  // Add status text
+  const statusText = document.createElement('div');
+  statusText.id = 'scan-status';
+  statusText.style.position = 'absolute';
+  statusText.style.bottom = '10px';
+  statusText.style.left = '50%';
+  statusText.style.transform = 'translateX(-50%)';
+  statusText.style.backgroundColor = 'rgba(0,0,0,0.7)';
+  statusText.style.color = 'white';
+  statusText.style.padding = '8px 16px';
+  statusText.style.borderRadius = '20px';
+  statusText.style.zIndex = '999';
+  statusText.textContent = 'Position QR code in the center';
+  document.querySelector('.scanner-container').appendChild(statusText);
+}
+
+// Enhanced start scanner function
 async function startScanner() {
   try {
+    // Set up visual elements
+    setupScannerElements();
+    
+    // Get user media with lower resolution first (might be more stable)
     const constraints = {
       video: { 
         facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: { ideal: 640 },  // Lower resolution may work better
+        height: { ideal: 480 }
       }
     };
     
@@ -424,21 +478,19 @@ async function startScanner() {
     video.srcObject = videoStream;
     video.setAttribute("playsinline", true);
     
-    // Wait for video to be loaded before starting the scanning process
+    // Important: Wait for metadata before getting dimensions
     video.onloadedmetadata = () => {
+      console.log(`Video dimensions: ${video.videoWidth}x${video.videoHeight}`);
       video.play();
       scanning = true;
       scannerPlaceholder.style.display = 'none';
       video.style.display = 'block';
       
-      // Enable debugging if needed
-      const enableDebug = true;
-      if (enableDebug) {
-        debugQrScanner();
-      }
-      
       // Start the scanning process
       requestAnimationFrame(tick);
+      
+      // Set status text
+      document.getElementById('scan-status').textContent = 'Camera active - looking for QR codes';
     };
     
   } catch (error) {
@@ -446,42 +498,80 @@ async function startScanner() {
     alert("Failed to access camera. Please ensure camera permissions are enabled.");
   }
 }
-// QR code scanning loop
+
+// Completely rewritten tick function with more verbose debugging and error handling
 function tick() {
-  if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
-    // Set canvas size to match video dimensions
-    canvasElement.height = video.videoHeight;
-    canvasElement.width = video.videoWidth;
-    
-    // Draw the video frame to the canvas
-    canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-    
-    // Get image data from the canvas
-    const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+  if (!scanning) return;
+  
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    const statusEl = document.getElementById('scan-status');
+    statusEl.textContent = 'Processing...';
     
     try {
-      // Add a console log to verify processing is happening
-      console.log("Processing frame for QR code");
+      // Make sure dimensions are correct
+      canvasElement.height = video.videoHeight;
+      canvasElement.width = video.videoWidth;
       
-      // Process the image data with jsQR
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      console.log(`Canvas dimensions set to ${canvasElement.width}x${canvasElement.height}`);
+      
+      // Draw the video frame to the canvas
+      canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+      
+      // Get image data from the canvas - THIS IS CRITICAL
+      let imageData;
+      try {
+        imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+        console.log(`Image data extracted: ${imageData.width}x${imageData.height}, ${imageData.data.length} bytes`);
+      } catch (e) {
+        console.error("Failed to get image data:", e);
+        statusEl.textContent = 'Error getting image data';
+        requestAnimationFrame(tick);
+        return;
+      }
+      
+      // CRITICAL CHECK: Make sure we have valid image data
+      if (imageData.data.length === 0 || 
+          imageData.width === 0 || 
+          imageData.height === 0) {
+        console.error("Invalid image data");
+        statusEl.textContent = 'Invalid image data';
+        requestAnimationFrame(tick);
+        return;
+      }
+      
+      // Process with jsQR
+      console.time('jsQR processing');
+      
+      // Verify jsQR is loaded
+      if (typeof jsQR !== 'function') {
+        console.error("jsQR is not available!");
+        statusEl.textContent = 'QR scanner library not loaded';
+        requestAnimationFrame(tick);
+        return;
+      }
+      
+      // Run QR detection with different options
+      let code = null;
+      // First try with default settings
+      code = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: "dontInvert",
       });
       
-      // If a QR code is found, process it
-      if (code && code.data) {
+      // If not found, try with inversion
+      if (!code) {
+        code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth",
+        });
+      }
+      
+      console.timeEnd('jsQR processing');
+      
+      if (code) {
         console.log("QR Code detected:", code.data);
+        statusEl.textContent = `Detected: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`;
         
-        // Visual feedback (optional - draw QR code location)
-        canvas.beginPath();
-        canvas.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
-        canvas.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
-        canvas.lineTo(code.location.bottomRightCorner.x, code.location.bottomRightCorner.y);
-        canvas.lineTo(code.location.bottomLeftCorner.x, code.location.bottomLeftCorner.y);
-        canvas.lineTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
-        canvas.lineWidth = 4;
-        canvas.strokeStyle = "#FF3B58";
-        canvas.stroke();
+        // Draw the QR code location
+        drawQrHighlight(code.location);
         
         // Check if this code was recently scanned (to prevent duplicates)
         if (!lastScannedCodes.has(code.data)) {
@@ -494,15 +584,60 @@ function tick() {
           // Process the scanned code
           processScannedCode(code.data);
         }
+      } else {
+        statusEl.textContent = 'Scanning... (no QR code detected)';
       }
     } catch (error) {
-      console.error("Error processing QR code:", error);
+      console.error("Error in QR scanning process:", error);
+      statusEl.textContent = 'Error in scan process';
     }
-    
-    // Continue scanning
-    requestAnimationFrame(tick);
-  } else if (scanning) {
-    requestAnimationFrame(tick);
+  } else {
+    console.log("Video not ready yet");
+  }
+  
+  // Continue scanning
+  requestAnimationFrame(tick);
+}
+
+// Helper function to draw QR highlight
+function drawQrHighlight(location) {
+  // Draw QR code outline
+  canvas.beginPath();
+  canvas.moveTo(location.topLeftCorner.x, location.topLeftCorner.y);
+  canvas.lineTo(location.topRightCorner.x, location.topRightCorner.y);
+  canvas.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y);
+  canvas.lineTo(location.bottomLeftCorner.x, location.bottomLeftCorner.y);
+  canvas.lineTo(location.topLeftCorner.x, location.topLeftCorner.y);
+  canvas.lineWidth = 4;
+  canvas.strokeStyle = "#FF3B58";
+  canvas.stroke();
+  
+  // Also highlight on the video view for user feedback
+  const indicator = document.getElementById('scan-indicator');
+  indicator.style.borderColor = '#FF3B58';
+  
+  // Reset after a short time
+  setTimeout(() => {
+    indicator.style.borderColor = '#4CAF50';
+  }, 500);
+}
+
+// Add this function to verify jsQR library is loaded properly
+function verifyJsQrLibrary() {
+  if (typeof jsQR === 'undefined') {
+    console.error("jsQR library is not loaded!");
+    alert("QR scanning library failed to load. Please check your internet connection and refresh the page.");
+    return false;
+  } else {
+    console.log("jsQR library found:", jsQR);
+    return true;
+  }
+}
+
+// Call this function when starting a session
+function startSessionWithVerification() {
+  if (verifyJsQrLibrary()) {
+    startScanner();
   }
 }
 function debugQrScanner() {
