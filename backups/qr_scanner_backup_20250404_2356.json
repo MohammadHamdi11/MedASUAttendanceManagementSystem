@@ -1,0 +1,17 @@
+[
+  {
+    "id": "session_1743803504474",
+    "location": "Jshdh",
+    "dateTime": "2025-04-04T21:51:44.474Z",
+    "formattedDateTime": "2025-04-04 23:51:44",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T21:51:50.842Z",
+        "formattedTime": "23:51:50"
+      }
+    ],
+    "inProgress": false
+  }
+]
