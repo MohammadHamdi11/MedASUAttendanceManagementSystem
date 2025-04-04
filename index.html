@@ -293,7 +293,7 @@ margin: 10% auto;
 </div>
 </div>
 <!-- Script for QR Code Scanning -->
-<script src="jsQR.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <!-- Script for Excel Export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -508,34 +508,6 @@ return false;
 }
 return true;
 }
-function loadJsQRLibrary() {
-  return new Promise((resolve, reject) => {
-    // First try loading from CDN
-    const script = document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js";
-    script.onload = () => {
-      console.log("jsQR loaded successfully from CDN");
-      resolve('cdn');
-    };
-    script.onerror = () => {
-      console.warn("Failed to load jsQR from CDN, trying local fallback...");
-      
-      // If CDN fails, try loading local copy
-      const localScript = document.createElement('script');
-      localScript.src = "jsQR.min.js"; // Assuming you've downloaded it
-      localScript.onload = () => {
-        console.log("jsQR loaded successfully from local file");
-        resolve('local');
-      };
-      localScript.onerror = () => {
-        console.error("Failed to load jsQR from both CDN and local file");
-        reject(new Error("Could not load jsQR library"));
-      };
-      document.head.appendChild(localScript);
-    };
-    document.head.appendChild(script);
-  });
-}
 // Add this check before starting your scanner
 startSessionBtn.addEventListener('click', () => {
 if (verifyEnvironment()) {
@@ -568,8 +540,6 @@ video.play();
 scanning = true;
 scannerPlaceholder.style.display = 'none';
 video.style.display = 'block';
-  // Add debug overlay
-  setupDebugOverlay();
 // Start the scanning process
 requestAnimationFrame(tick);
 // Set status text
@@ -580,202 +550,47 @@ console.error("Failed to access camera:", error);
 alert("Failed to access camera. Please ensure camera permissions are enabled.");
 }
 }
-function setupDebugOverlay() {
-  const debugOverlay = document.createElement('div');
-  debugOverlay.id = 'qr-debug-overlay';
-  debugOverlay.style.position = 'absolute';
-  debugOverlay.style.top = '10px';
-  debugOverlay.style.left = '10px';
-  debugOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-  debugOverlay.style.color = 'white';
-  debugOverlay.style.padding = '10px';
-  debugOverlay.style.borderRadius = '5px';
-  debugOverlay.style.zIndex = '1000';
-  debugOverlay.style.fontSize = '12px';
-  debugOverlay.style.maxWidth = '300px';
-  document.querySelector('.scanner-container').appendChild(debugOverlay);
-  
-  // Update debug info every second
-  let frameCount = 0;
-  let lastFrameCount = 0;
-  let lastUpdateTime = Date.now();
-  
-  // Monkey patch requestAnimationFrame to count frames
-  const originalRAF = window.requestAnimationFrame;
-  window.requestAnimationFrame = function(callback) {
-    frameCount++;
-    return originalRAF(callback);
-  };
-  
-  setInterval(() => {
-    const now = Date.now();
-    const elapsed = (now - lastUpdateTime) / 1000;
-    const fps = Math.round((frameCount - lastFrameCount) / elapsed);
-    lastFrameCount = frameCount;
-    lastUpdateTime = now;
-    
-    // Get camera details
-    let cameraInfo = 'No camera';
-    if (videoStream) {
-      const videoTrack = videoStream.getVideoTracks()[0];
-      if (videoTrack) {
-        cameraInfo = `${videoTrack.label} (${videoTrack.enabled ? 'enabled' : 'disabled'})`;
-        
-        // Try to get advanced settings
-        try {
-          const settings = videoTrack.getSettings();
-          if (settings) {
-            cameraInfo += `<br>Resolution: ${settings.width}x${settings.height}`;
-            if (settings.frameRate) {
-              cameraInfo += `<br>Frame rate: ${settings.frameRate}`;
-            }
-          }
-        } catch (e) {
-          console.log("Could not get camera settings:", e);
-        }
-      }
-    }
-    
-    // Check jsQR status
-    const jsQRStatus = typeof jsQR === 'function' ? 'Available' : 'Not loaded';
-    
-    // Update the debug overlay
-    debugOverlay.innerHTML = `
-      <strong>QR Scanner Debug</strong><br>
-      jsQR: ${jsQRStatus}<br>
-      Camera: ${cameraInfo}<br>
-      Video: ${video.videoWidth}x${video.videoHeight}<br>
-      Canvas: ${canvasElement.width}x${canvasElement.height}<br>
-      FPS: ${fps}<br>
-      Scanning: ${scanning ? 'Active' : 'Inactive'}<br>
-      <button id="toggle-debug" style="margin-top: 5px; padding: 3px; font-size: 10px;">Hide Debug</button>
-    `;
-    
-    // Add toggle button functionality
-    document.getElementById('toggle-debug').addEventListener('click', function() {
-      if (debugOverlay.style.height === 'auto') {
-        debugOverlay.style.height = '20px';
-        debugOverlay.style.overflow = 'hidden';
-        this.textContent = 'Show Debug';
-      } else {
-        debugOverlay.style.height = 'auto';
-        debugOverlay.style.overflow = 'visible';
-        this.textContent = 'Hide Debug';
-      }
-    });
-  }, 1000);
-}
 // Completely rewritten tick function with more verbose debugging and error handling
 function tick() {
-  if (!scanning) return;
-  
-  // First check if video is ready
-  if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-    requestAnimationFrame(tick);
-    return;
-  }
-  
-  const statusEl = document.getElementById('scan-status') || document.createElement('div');
-  statusEl.textContent = 'Processing frame...';
-  
-  try {
-    // Clear canvas first
-    canvas.clearRect(0, 0, canvasElement.width, canvasElement.height);
-    
-    // Make sure dimensions match video
-    canvasElement.height = video.videoHeight;
-    canvasElement.width = video.videoWidth;
-    
-    // Draw the current video frame
-    canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-    
-    // Get image data - wrapped in try/catch
-    let imageData;
-    try {
-      imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-    } catch (e) {
-      console.error("Failed to get image data:", e);
-      
-      // If this is a security error, likely a CORS issue
-      if (e.name === 'SecurityError') {
-        alert("Security error accessing camera data. This may be due to CORS restrictions.");
-        scanning = false;
-        return;
-      }
-      
-      requestAnimationFrame(tick);
-      return;
-    }
-    
-    // Verify we have valid data
-    if (!imageData || imageData.width === 0 || imageData.height === 0) {
-      console.error("Invalid image data");
-      requestAnimationFrame(tick);
-      return;
-    }
-    
-    // Log dimensions periodically (every 30 frames)
-    if (Math.random() < 0.033) { // ~1/30 probability
-      console.log(`Processing frame: ${imageData.width}x${imageData.height}`);
-    }
-    
-    // Try different QR code detection strategies
-    let code = null;
-    const options = [
-      { inversionAttempts: "dontInvert" },
-      { inversionAttempts: "onlyInvert" },
-      { inversionAttempts: "attemptBoth" }
-    ];
-    
-    // Try each option until we find a code
-    for (const option of options) {
-      if (typeof jsQR !== 'function') {
-        console.error("jsQR function not available");
-        statusEl.textContent = 'QR scanner not initialized';
-        requestAnimationFrame(tick);
-        return;
-      }
-      
-      try {
-        code = jsQR(imageData.data, imageData.width, imageData.height, option);
-        if (code) break;
-      } catch (e) {
-        console.error("jsQR error with option", option, e);
-      }
-    }
-    
-    if (code) {
-      console.log("QR Code detected:", code.data);
-      statusEl.textContent = `Detected: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`;
-      
-      // Draw the QR code location
-      drawQrHighlight(code.location);
-      
-      // Process the scanned code (with duplicate prevention)
-      if (!lastScannedCodes.has(code.data)) {
-        lastScannedCodes.add(code.data);
-        setTimeout(() => lastScannedCodes.delete(code.data), 3000);
-        processScannedCode(code.data);
-        
-        // Provide haptic feedback if available
-        if (navigator.vibrate) {
-          navigator.vibrate(200);
-        }
-        
-        // Play a success sound
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLX7N7tivZDAtXqDO47FxQE5WY3OAoswEIjJ1kpuM54UlJHG1yrGPWDc9i/Hjx3Q0FUyj4sKHQiRMmea6eyg8abXLmD8yPqLat18lM5PqyGgkHFjF6MxxKyFSt/LZmD0gNqf24rplGhxj2O2/VSEucMnriEAmJGvT8cJ+IiBVw/nioQkMHFHY/89yBwhT2P/YZQYBS3sHDw8predxNw00grC9iSwHVcL7r0gFBk6V+rt3CAE9f/LXpg8HJ2vrz6cYBxpR5OC+YTUphOTvni0HF03k8Kk5BAQwWOXwrw4DAiRZ8OimDgMTON7szQT9KWP4vQwEAjOa/cVqEQ8xk/1+GQolc94VRAQQPKL8gBgJChxL7CAMDxJEq/qOLg0MClj2BBgIBhhT9iAUDQEZRvx7Iw8TPXD1VhMKCU2Y/pMpCgsdTPFB8Pnh6P5XCyEkZ/o/7vft//IEBBtE9DIK/vwE/wgJGzb0qRD2/A/+AQT+CiRN9dkB+/krEP8RIlHmzvn+DSUdLUnYues0BSIXEz7aGu3d5PMGJThXp8aj0PL4AwoXOM8a2Mf1Cgw1S+kvzMP7vRBDWPIh1djjzv8TLGrsEsPH/O8JLFzkO+Ho5MITH1TxBsPF88IEN2/rIsKu8UwEPHXpIrWF7oAGQojjJaFz7P4EQ5DhGJ5n8BoDOIvgLZdz9zwDLIjgNZuA+u4CI4rgPZ2J/kwDGX3fQaaY/zsCA2/eSbCr/2IBBGfeWbq8/8cAAQnfacbPAMT//wDfa8vbAcn+/f/bc9HjAs/9+/7Wd9frA9T9+fzMet3yBd39+PvCfuH4B+j++vq4geb8CfT/+vm0g+j/C/wB+/ixhOsEEAMF+/atfe4KFAYK+/Wreuj9DNwZ3umsetuQN+TuxnJCX+0Dc7XtZBFtz/EAhLTpTxlw0PAAfLDmgiBy1vD7cqzihSR32fH3aKngiiZ63PP0V6feiCh/3vXyL6LciCV8y8r0TZvXfx9wv871QpXRehdnuPjxOo/Ncw9equX4MSuGxmwEU5nZ+DIjfcJbEWOTtKBRNn+0jCZvrYZhYmaVnVBCg66XZFRTlbhWRgAAwf8AAcX/AAHK/wEBzP8BAcz/AQHM/wEBzP8BAcz/AQHM/wEBzP8BAcz/AQHJ/wEBw/8AAAApJSFIqqOUnoiIiJgyPVJ2h5CmqaypqrB6eH9ORENHSEhFREJANzQ4LCgkHhgwOktVVlFMSUVAPjw5MywrNCMZGBdpSzctF0NkV0Q3M1tpV0AxN11xYEc0O2F4ZEs4PmF4YkY1Ol9uWj4wOViGfFgvOHGeol8xL3/InWowM4nWoV8tN5Tcol0rOZzlpVspP6bvqVtVaG5ubm5sbGlnZmRgYF5cWVdWVFJRT05LSUZFQ0JAP0A+PDk4NzU0MDEwMC4tLSwsLCoqKioppqWmpqalpqelpqWmpqenpqenp6enp6eoqKioqKioqKioqKioqKioqKmpqampqampqampqampqampqampqampqampqampqampqqqsra+ws7W3urq7vbzc3Nzc29vb2tra2dnZ2djY2NjX19fW1tbW1dXV1dXV1NTU1NTT09PT09PS0tLS0tLR0dHQ0NDQ0NDPz8/Pz8/Ozs7Ozs7Nzc3MzMzMzMzLy8vLy8vKysrKysrJycnIyMjIyMjHx8fHx8fGxsbGxsbFxcXExMTDw8PCwsLBwcHAwMC/v7+cmpoPDQ4NDAsLCwsKCgoKCQkJCQkICAgIBwcHBwcHBgYGBgYGBgUFBQUFBQQEBAQEBAMDAwMDAwICAgICAgEBAQEBAQAAAAAA');
-        audio.play().catch(e => console.log("Audio play failed:", e));
-      }
-    } else {
-      statusEl.textContent = 'Scanning for QR code...';
-    }
-  } catch (error) {
-    console.error("Error in QR scanning process:", error);
-    statusEl.textContent = 'Error in scan process';
-  }
-  
-  // Continue scanning
-  requestAnimationFrame(tick);
+if (!scanning) return;
+if (video.readyState === video.HAVE_ENOUGH_DATA) {
+const statusEl = document.getElementById('scan-status');
+statusEl.textContent = 'Processing...';
+try {
+// Make sure dimensions are correct
+canvasElement.height = video.videoHeight;
+canvasElement.width = video.videoWidth;
+console.log(`Canvas dimensions set to ${canvasElement.width}x${canvasElement.height}`);
+// Draw the video frame to the canvas
+canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+// Get image data from the canvas - THIS IS CRITICAL
+let imageData;
+try {
+imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+console.log(`Image data extracted: ${imageData.width}x${imageData.height}, ${imageData.data.length} bytes`);
+} catch (e) {
+console.error("Failed to get image data:", e);
+statusEl.textContent = 'Error getting image data';
+requestAnimationFrame(tick);
+return;
+}
+// CRITICAL CHECK: Make sure we have valid image data
+if (imageData.data.length === 0 || 
+imageData.width === 0 || 
+imageData.height === 0) {
+console.error("Invalid image data");
+statusEl.textContent = 'Invalid image data';
+requestAnimationFrame(tick);
+return;
+}
+// Process with jsQR
+console.time('jsQR processing');
+// Verify jsQR is loaded
+if (typeof jsQR !== 'function') {
+console.error("jsQR is not available!");
+statusEl.textContent = 'QR scanner library not loaded';
+requestAnimationFrame(tick);
+return;
 }
 // Run QR detection with different options
 let code = null;
@@ -1126,70 +941,6 @@ testData[i + 1] = 255; // G
 testData[i + 2] = 255; // B
 testData[i + 3] = 255; // A
 }
-// Add this function right after your existing testJsQrLibrary function
-function diagnoseJsQrIssue() {
-  console.log("Diagnosing jsQR loading issues...");
-  
-  // Check if the script loaded at all
-  const jsQrScript = document.querySelector('script[src*="jsQR"]');
-  if (!jsQrScript) {
-    console.error("jsQR script tag not found in document");
-    return "Script tag missing";
-  }
-  
-  // Check if the script loaded successfully
-  if (jsQrScript.getAttribute('data-loaded') !== 'true') {
-    console.error("jsQR script may not have loaded completely");
-  }
-  
-  // Check if jsQR is defined
-  if (typeof jsQR === 'undefined') {
-    console.error("jsQR is undefined - library failed to load or initialize");
-    return "Library not loaded";
-  }
-  
-  // Check if jsQR is a function
-  if (typeof jsQR !== 'function') {
-    console.error("jsQR is not a function - incorrect library loaded");
-    return "Library incorrect";
-  }
-  
-  // Try a simple test
-  try {
-    // Create a tiny test image (1x1 white pixel)
-    const testData = new Uint8ClampedArray([255, 255, 255, 255]);
-    // Just testing if function executes without error
-    jsQR(testData, 1, 1);
-    console.log("jsQR function executed without error");
-    return "Library OK";
-  } catch (e) {
-    console.error("jsQR function threw an error:", e);
-    return "Library error: " + e.message;
-  }
-}
-
-// Modify your window load event handler
-window.addEventListener('load', () => {
-  // Wait for everything to load
-  setTimeout(() => {
-    // Mark the script as loaded (add this attribute to track load status)
-    const jsQrScript = document.querySelector('script[src*="jsQR"]');
-    if (jsQrScript) {
-      jsQrScript.setAttribute('data-loaded', 'true');
-    }
-    
-    // Run diagnostics
-    const status = diagnoseJsQrIssue();
-    console.log("jsQR Diagnosis:", status);
-    
-    if (status !== "Library OK") {
-      alert("QR scanner issue detected: " + status + 
-            "\nTry using a local copy of the library or check console for details.");
-    } else {
-      testJsQrLibrary();
-    }
-  }, 2000);
-});
 // Try to decode a blank image (should return null, but not error)
 try {
 const result = jsQR(testData, qrWidth, qrHeight);
@@ -1324,15 +1075,6 @@ window.addEventListener('load', () => {
 // Create folder in storage for downloads (this is not fully supported in browsers)
 // Modern browsers don't allow creating directories or choosing save locations
 // for security reasons, but files will be saved according to browser's download settings
-});
-document.addEventListener('DOMContentLoaded', () => {
-  loadJsQRLibrary()
-    .then(source => {
-      console.log(`jsQR library loaded from ${source}`);
-    })
-    .catch(error => {
-      alert("Failed to load QR scanning library. Error: " + error.message);
-    });
 });
 </script>
 </body>
