@@ -295,23 +295,21 @@ margin: 10% auto;
 </div>
 <div id="backup" class="tab-content">
 <div class="card">
-<h2>GitHub Backup</h2>
+<h2>Backup Settings</h2>
 <div class="backup-status">
-<p>Connection Status: <span id="connectionStatus">Checking...</span></p>
-<p>Last Backup: <span id="lastBackupTime">Never</span></p>
+<p><strong>Connection Status:</strong> <span id="connectionStatus">Checking...</span></p>
+<p><strong>Last Backup:</strong> <span id="lastBackupTime">Never</span></p>
 </div>
-<div class="token-section">
-<h3>GitHub Configuration</h3>
-<p>Enter your GitHub token to enable backup to GitHub:</p>
-<div class="input-group">
+<div class="backup-controls">
+<h3>GitHub Authentication</h3>
+<p>Enter your GitHub personal access token with repository permissions:</p>
 <input type="password" id="githubTokenInput" placeholder="GitHub Personal Access Token">
 <button id="saveTokenBtn" class="button">Save Token</button>
+<p id="tokenStatusMessage"></p>
+<h3>Backup</h3>
+<button id="backupBtn" class="button">Backup to GitHub</button>
+<p><small>Note: When online, backups automatically occur at app startup and when sessions end.</small></p>
 </div>
-<p id="tokenStatusMessage" class="status-message"></p>
-<p class="small-text">Note: You need a GitHub personal access token with 'repo' scope to use this feature.</p>
-</div>
-<div class="buttons">
-<button id="backupBtn" class="button primary">Backup to GitHub</button>
 </div>
 <div class="info-section">
 <h3>About Backup</h3>
@@ -356,13 +354,14 @@ const detailsBody = document.getElementById('detailsBody');
 const exportSessionBtn = document.getElementById('exportSessionBtn');
 const closeDetailsBtn = document.getElementById('closeDetailsBtn');
 const sortBy = document.getElementById('sortBy');
-// New backup tab elements
+// Backup tab elements
 const backupBtn = document.getElementById('backupBtn');
 const lastBackupTime = document.getElementById('lastBackupTime');
 const connectionStatus = document.getElementById('connectionStatus');
 const githubTokenInput = document.getElementById('githubTokenInput');
 const saveTokenBtn = document.getElementById('saveTokenBtn');
 const tokenStatusMessage = document.getElementById('tokenStatusMessage');
+const autoBackupStatus = document.getElementById('autoBackupStatus');
 //======== APPLICATION STATE ========//
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
@@ -374,6 +373,8 @@ let activeSessionId = null;
 let lastScannedCodes = new Set(); // For avoiding duplicate scans in quick succession
 let jsQRLoaded = false;
 let autoSaveInterval = null;
+let backupInProgress = false;
+let lastBackupSessions = 0; // Track number of sessions at last backup
 // Constants for auto-save functionality
 const AUTO_SAVE_DELAY = 3000; // 3 seconds
 const ACTIVE_SESSION_STORAGE_KEY = 'qrScannerActiveSession';
@@ -382,10 +383,12 @@ const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex';
 // GitHub backup constants
 const GITHUB_TOKEN_KEY = 'qrScannerGithubToken';
 const LAST_BACKUP_TIME_KEY = 'qrScannerLastBackupTime';
+const LAST_BACKUP_SESSIONS_KEY = 'qrScannerLastBackupSessions';
 const DEFAULT_GITHUB_OWNER = 'MohammadHamdi11';
 const DEFAULT_GITHUB_REPO = 'QRScanner-webapp';
 const DEFAULT_GITHUB_PATH = 'backups';
 const DEFAULT_GITHUB_BRANCH = 'main';
+const AUTO_BACKUP_ENABLED_KEY = 'qrScannerAutoBackupEnabled';
 //======== GITHUB BACKUP FUNCTIONS ========//
 // Check internet connection status
 function updateConnectionStatus() {
@@ -393,10 +396,20 @@ if (navigator.onLine) {
 connectionStatus.textContent = 'Online';
 connectionStatus.style.color = '#4caf50'; // Green
 connectionStatus.style.fontWeight = 'bold';
+// Update auto-backup status display if element exists
+if (autoBackupStatus) {
+const autoBackupEnabled = localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) !== 'false';
+autoBackupStatus.textContent = autoBackupEnabled ? 'Enabled' : 'Disabled';
+autoBackupStatus.style.color = autoBackupEnabled ? '#4caf50' : '#f44336';
+}
 } else {
 connectionStatus.textContent = 'Offline';
 connectionStatus.style.color = '#f44336'; // Red
 connectionStatus.style.fontWeight = 'bold';
+if (autoBackupStatus) {
+autoBackupStatus.textContent = 'Unavailable (Offline)';
+autoBackupStatus.style.color = '#f44336';
+}
 }
 }
 // Save GitHub token to local storage
@@ -407,6 +420,9 @@ try {
 localStorage.setItem(GITHUB_TOKEN_KEY, token);
 tokenStatusMessage.textContent = 'Token saved successfully!';
 tokenStatusMessage.style.color = '#4caf50';
+// Enable auto-backup by default when token is saved
+localStorage.setItem(AUTO_BACKUP_ENABLED_KEY, 'true');
+updateConnectionStatus(); // Update status display
 setTimeout(() => {
 tokenStatusMessage.textContent = '';
 }, 3000);
@@ -452,20 +468,65 @@ lastBackupTime.textContent = 'Error';
 function prepareDataForBackup() {
 return JSON.stringify(sessions, null, 2);
 }
+// Check if backup is needed
+function isBackupNeeded() {
+// Check if we have more sessions than last time we backed up
+const savedLastBackupSessions = parseInt(localStorage.getItem(LAST_BACKUP_SESSIONS_KEY) || '0');
+return sessions.length > savedLastBackupSessions;
+}
+// Try to automatically backup data if conditions are met
+async function tryAutoBackup() {
+// Don't run if already in progress, offline, or disabled
+if (backupInProgress || !navigator.onLine) {
+return false;
+}
+const autoBackupEnabled = localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) !== 'false';
+if (!autoBackupEnabled) {
+console.log('Auto-backup is disabled');
+return false;
+}
+const token = loadGitHubToken();
+if (!token) {
+console.log('GitHub token not found, auto-backup skipped');
+return false;
+}
+// Check if there's anything new to backup
+if (!isBackupNeeded()) {
+console.log('No new data to backup');
+return false;
+}
+console.log('Starting automatic backup...');
+try {
+// Perform the backup
+await backupToGitHub(true);
+console.log('Auto-backup completed successfully');
+return true;
+} catch (error) {
+console.error('Auto-backup failed:', error);
+return false;
+}
+}
 // Backup to GitHub
-async function backupToGitHub() {
+async function backupToGitHub(isAutoBackup = false) {
 if (!navigator.onLine) {
+if (!isAutoBackup) {
 alert('Cannot backup: You are offline.');
+}
 return;
 }
 const token = loadGitHubToken();
 if (!token) {
+if (!isAutoBackup) {
 alert('Please enter your GitHub token first.');
+}
 return;
 }
 try {
+backupInProgress = true;
+if (!isAutoBackup && backupBtn) {
 backupBtn.disabled = true;
 backupBtn.textContent = 'Backing up...';
+}
 const fileName = `qr_scanner_backup_${formatDateTimeForFile(new Date())}.json`;
 const content = prepareDataForBackup();
 const contentEncoded = btoa(unescape(encodeURIComponent(content)));
@@ -507,18 +568,26 @@ if (response.ok) {
 // Update last backup time
 const now = new Date().toISOString();
 localStorage.setItem(LAST_BACKUP_TIME_KEY, now);
+localStorage.setItem(LAST_BACKUP_SESSIONS_KEY, sessions.length.toString());
 updateLastBackupTimeDisplay();
+if (!isAutoBackup) {
 alert('Backup to GitHub completed successfully!');
+}
 } else {
 const errorData = await response.json();
 throw new Error(`GitHub API error: ${errorData.message}`);
 }
 } catch (error) {
 console.error('GitHub backup error:', error);
+if (!isAutoBackup) {
 alert(`Backup failed: ${error.message}`);
+}
 } finally {
+backupInProgress = false;
+if (!isAutoBackup && backupBtn) {
 backupBtn.disabled = false;
 backupBtn.textContent = 'Backup to GitHub';
+}
 }
 }
 // Export Excel file to GitHub
@@ -571,10 +640,7 @@ body: JSON.stringify(requestBody)
 });
 if (response.ok) {
 console.log('Excel file uploaded to GitHub successfully');
-// Update last backup time
-const now = new Date().toISOString();
-localStorage.setItem(LAST_BACKUP_TIME_KEY, now);
-updateLastBackupTimeDisplay();
+// Don't update last backup time as this is separate from the main backup
 } else {
 const errorData = await response.json();
 console.error(`GitHub API error: ${errorData.message}`);
@@ -595,7 +661,11 @@ updateConnectionStatus();
 loadGitHubToken();
 updateLastBackupTimeDisplay();
 // Setup online/offline event listeners
-window.addEventListener('online', updateConnectionStatus);
+window.addEventListener('online', () => {
+updateConnectionStatus();
+// Try auto-backup when connection is restored
+tryAutoBackup();
+});
 window.addEventListener('offline', updateConnectionStatus);
 // Check if jsQR is already defined (from the script tag in HTML)
 if (typeof jsQR === 'function') {
@@ -609,6 +679,19 @@ loadJsQR()
 console.error("Error loading jsQR:", error);
 alert("Failed to load QR code scanning library. Please check your files and try again.");
 });
+}
+// Load last backup session count
+lastBackupSessions = parseInt(localStorage.getItem(LAST_BACKUP_SESSIONS_KEY) || '0');
+// Try auto-backup if online and there are new sessions
+if (navigator.onLine) {
+// Use setTimeout to ensure the app is fully loaded first
+setTimeout(() => {
+tryAutoBackup().then(success => {
+if (success) {
+console.log("Initial auto-backup completed");
+}
+});
+}, 2000);
 }
 // Add beforeunload event listener to prevent accidental closing during active session
 window.addEventListener('beforeunload', handleBeforeUnload);
@@ -668,7 +751,7 @@ updateLastBackupTimeDisplay();
 });
 // GitHub backup event listeners
 if (backupBtn) {
-backupBtn.addEventListener('click', backupToGitHub);
+backupBtn.addEventListener('click', () => backupToGitHub(false));
 }
 if (saveTokenBtn) {
 saveTokenBtn.addEventListener('click', saveGitHubToken);
@@ -767,6 +850,59 @@ function stopAutoSave() {
 if (autoSaveInterval) {
 clearInterval(autoSaveInterval);
 autoSaveInterval = null;
+}
+}
+// End session handler
+function endSessionHandler() {
+if (!activeSession) return;
+// Confirm if there are no scans
+if (activeSession.scans.length === 0) {
+if (!confirm("No scans detected in this session. Do you still want to end it?")) {
+return;
+}
+}
+// Stop scanner and auto-save
+stopScanner();
+stopAutoSave();
+// Mark session as completed
+activeSession.inProgress = false;
+activeSession = null;
+// Clear active session storage since it's complete
+localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+// Save sessions to storage
+saveSessionsToStorage();
+// Update UI
+sessionInfo.style.display = 'none';
+startSessionBtn.textContent = 'Start New Session';
+startSessionBtn.removeEventListener('click', endSessionHandler);
+startSessionBtn.addEventListener('click', startSessionBtnHandler);
+// Update history view
+updateHistoryView();
+// If online, trigger automatic backup
+if (navigator.onLine) {
+const autoBackupEnabled = localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) !== 'false';
+if (autoBackupEnabled) {
+console.log("Automatic backup after session end");
+tryAutoBackup();
+}
+}
+}
+// Start session button handler
+function startSessionBtnHandler() {
+// Before showing the modal, verify if jsQR is loaded
+if (!jsQRLoaded) {
+loadJsQR()
+.then(() => {
+sessionModal.style.display = 'block';
+locationInput.focus();
+})
+.catch(() => {
+alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
+});
+} else {
+sessionModal.style.display = 'block';
+locationInput.focus();
 }
 }
 //======== CAMERA & SCANNER FUNCTIONS ========//
@@ -1450,6 +1586,8 @@ XLSX.utils.book_append_sheet(wb, ws, "Scans");
 XLSX.writeFile(wb, fileName);
 // Backup to GitHub if possible
 exportExcelToGitHub(fileName, wb);
+// Also trigger a full backup of all sessions
+tryAutoBackup();
 }
 // Export all sessions to Excel
 function exportAllSessions() {
@@ -1507,6 +1645,8 @@ XLSX.writeFile(wb, fileName);
 console.log("File written successfully:", fileName);
 // Backup to GitHub if possible
 exportExcelToGitHub(fileName, wb);
+// Also trigger a full backup of all sessions
+tryAutoBackup();
 } catch (e) {
 console.error("Error writing file:", e);
 alert("Error exporting file: " + e.message);
