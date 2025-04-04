@@ -690,65 +690,37 @@ saveActiveSession();
 }
 // End current scanning session
 function endSessionHandler() {
-    if (scanning) {
-        scanning = false;
-        // Stop auto-save
-        stopAutoSave();
-        // Stop camera
-        if (videoStream) {
-            videoStream.getTracks().forEach(track => track.stop());
-            videoStream = null;
-        }
-        // Update UI
-        video.style.display = 'none';
-        scannerPlaceholder.style.display = 'block';
-        // Clean up UI elements
-        const scannerUI = document.querySelectorAll('.scanner-ui');
-        scannerUI.forEach(el => el.remove());
-        
-        // Store the session to be exported
-        const sessionToExport = {...activeSession};
-        
-        // Move active session to completed sessions
-        sessions.push(activeSession);
-        saveSessionsToStorage();
-        // Clear the active session storage
-        clearActiveSession();
-        updateHistoryView();
-        
-        // Auto-export this session with better error handling
-        try {
-            if (sessionToExport && sessionToExport.scans && sessionToExport.scans.length > 0) {
-                console.log("Auto-exporting session:", sessionToExport.id);
-                exportSession(sessionToExport);
-                console.log("Session auto-exported successfully");
-            }
-        } catch (error) {
-            console.error("Auto-export failed:", error);
-            // Show non-blocking notification instead of alert
-            const notification = document.createElement('div');
-            notification.style.position = 'fixed';
-            notification.style.bottom = '20px';
-            notification.style.right = '20px';
-            notification.style.backgroundColor = '#ff3b58';
-            notification.style.color = 'white';
-            notification.style.padding = '10px 20px';
-            notification.style.borderRadius = '5px';
-            notification.style.zIndex = '1000';
-            notification.textContent = 'Auto-export failed. You can export manually from history.';
-            document.body.appendChild(notification);
-            setTimeout(() => notification.remove(), 5000);
-        }
-        
-        // Reset UI
-        sessionInfo.style.display = 'none';
-        startSessionBtn.textContent = 'Start Scanning Session';
-        startSessionBtn.removeEventListener('click', endSessionHandler);
-        startSessionBtn.addEventListener('click', startSessionBtnHandler);
-        
-        // Show confirmation
-        alert('Session completed and exported successfully!');
-    }
+if (scanning) {
+scanning = false;
+// Stop auto-save
+stopAutoSave();
+// Stop camera
+if (videoStream) {
+videoStream.getTracks().forEach(track => track.stop());
+videoStream = null;
+}
+// Update UI
+video.style.display = 'none';
+scannerPlaceholder.style.display = 'block';
+// Clean up UI elements
+const scannerUI = document.querySelectorAll('.scanner-ui');
+scannerUI.forEach(el => el.remove());
+// Move active session to completed sessions
+sessions.push(activeSession);
+saveSessionsToStorage();
+// Clear the active session storage
+clearActiveSession();
+updateHistoryView();
+// Auto-export this session
+exportSession(activeSession);
+// Reset UI
+sessionInfo.style.display = 'none';
+startSessionBtn.textContent = 'Start Scanning Session';
+startSessionBtn.removeEventListener('click', endSessionHandler);
+startSessionBtn.addEventListener('click', startSessionBtnHandler);
+// Show confirmation
+alert('Session completed and exported successfully!');
+}
 }
 // Handler for start session button
 function startSessionBtnHandler() {
@@ -965,155 +937,214 @@ historyList.appendChild(card);
 }
 // Show session details
 function showSessionDetails(session) {
-detailLocation.textContent = session.location;
-detailDateTime.textContent = session.formattedDateTime;
-detailCount.textContent = session.scans.length;
-// Fill table
-detailsBody.innerHTML = '';
-session.scans.forEach(scan => {
-const row = document.createElement('tr');
-row.innerHTML = `
-<td>${scan.id}</td>
-<td>${escapeHtml(scan.content)}</td>
-<td>${scan.formattedTime}</td>
-`;
-detailsBody.appendChild(row);
-});
-sessionDetails.style.display = 'block';
+  detailLocation.textContent = session.location;
+  detailDateTime.textContent = session.formattedDateTime;
+  detailCount.textContent = session.scans.length;
+  
+  // Show in-progress status if applicable
+  const statusElement = document.querySelector('#sessionDetails h3');
+  if (statusElement) {
+    if (session.inProgress) {
+      statusElement.innerHTML = `Session Details <span style="color:#FF3B58">(In Progress)</span>`;
+      // Add recover button if the session is in progress and not currently active
+      if (!activeSession || activeSession.id !== session.id) {
+        const recoverButton = document.createElement('button');
+        recoverButton.className = 'button';
+        recoverButton.style.backgroundColor = '#FF3B58';
+        recoverButton.textContent = 'Resume Session';
+        recoverButton.addEventListener('click', () => {
+          recoverSession(session);
+          sessionDetails.style.display = 'none';  // Hide details after recovering
+        });
+        // Insert before export button
+        const buttonsDiv = document.querySelector('#sessionDetails .buttons');
+        if (buttonsDiv && buttonsDiv.firstChild) {
+          buttonsDiv.insertBefore(recoverButton, buttonsDiv.firstChild);
+        }
+      }
+    } else {
+      statusElement.textContent = 'Session Details';
+      // Remove recover button if it exists
+      const recoverButton = document.querySelector('#sessionDetails button[style*="FF3B58"]');
+      if (recoverButton) {
+        recoverButton.remove();
+      }
+    }
+  }
+  
+  // Fill table
+  detailsBody.innerHTML = '';
+  session.scans.forEach(scan => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${scan.id}</td>
+      <td>${escapeHtml(scan.content)}</td>
+      <td>${scan.formattedTime}</td>
+    `;
+    detailsBody.appendChild(row);
+  });
+  
+  sessionDetails.style.display = 'block';
 }
+
 // Export single session to Excel
 function exportSession(session) {
-if (!window.XLSX) {
-console.error("XLSX library not loaded");
-alert("Export functionality is not available. Please check your internet connection.");
-return;
+  if (!window.XLSX) {
+    console.error("XLSX library not loaded");
+    alert("Export functionality is not available. Please check your internet connection.");
+    return;
+  }
+  
+  const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
+  
+  // Prepare data with modified column headers
+  const data = [
+    ['Number', 'Student ID', 'Location', 'Date', 'Time']
+  ];
+  
+  session.scans.forEach(scan => {
+    const scanDate = new Date(scan.time);
+    data.push([
+      scan.id,                // Row number (previously ID)
+      scan.content,           // QR code content is now Student ID
+      session.location,
+      formatDate(scanDate),
+      formatTime(scanDate)
+    ]);
+  });
+  
+  // Create workbook
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Scans");
+  
+  // Save file
+  XLSX.writeFile(wb, fileName);
 }
-const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
-// Prepare data with modified column headers
-const data = [
-['Number', 'Student ID', 'Location', 'Date', 'Time']
-];
-session.scans.forEach(scan => {
-const scanDate = new Date(scan.time);
-data.push([
-scan.id,                // Row number (previously ID)
-scan.content,           // QR code content is now Student ID
-session.location,
-formatDate(scanDate),
-formatTime(scanDate)
-]);
-});
-// Create workbook
-const ws = XLSX.utils.aoa_to_sheet(data);
-const wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, ws, "Scans");
-// Save file
-XLSX.writeFile(wb, fileName);
-}
+
 // Export all sessions to Excel
 function exportAllSessions() {
-if (sessions.length === 0) return;
-if (!window.XLSX) {
-console.error("XLSX library not loaded");
-alert("Export functionality is not available. Please check your internet connection.");
-return;
+  if (sessions.length === 0) return;
+  
+  if (!window.XLSX) {
+    console.error("XLSX library not loaded");
+    alert("Export functionality is not available. Please check your internet connection.");
+    return;
+  }
+  
+  const fileName = `QR_Scan_All_Sessions_${formatDateTimeForFile(new Date())}.xlsx`;
+  const wb = XLSX.utils.book_new();
+  
+  // Counter for unique sheet names
+  let sheetCounter = {};
+  
+  // For each session
+  sessions.forEach(session => {
+    const data = [
+      ['Number', 'Student ID', 'Location', 'Date', 'Time']
+    ];
+    
+    session.scans.forEach(scan => {
+      const scanDate = new Date(scan.time);
+      data.push([
+        scan.id,
+        scan.content,
+        session.location,
+        formatDate(scanDate),
+        formatTime(scanDate)
+      ]);
+    });
+    
+    if (data.length > 1) {
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      
+      // Create unique sheet name
+      let baseSheetName = session.location.substring(0, 25).replace(/[^a-z0-9]/gi, '_');
+      if (baseSheetName.length === 0) baseSheetName = "Session";
+      
+      // Ensure uniqueness
+      if (sheetCounter[baseSheetName]) {
+        sheetCounter[baseSheetName]++;
+        baseSheetName = baseSheetName + "_" + sheetCounter[baseSheetName];
+      } else {
+        sheetCounter[baseSheetName] = 1;
+      }
+      
+      // Excel sheet names cannot exceed 31 characters
+      const sheetName = baseSheetName.substring(0, 31);
+      
+      try {
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      } catch (e) {
+        console.error("Error adding sheet:", e);
+        // If there's an error with this sheet, try with a generic name
+        XLSX.utils.book_append_sheet(wb, ws, "Session_" + Math.random().toString(36).substring(2, 7));
+      }
+    }
+  });
+  
+  try {
+    // Save file with error handling
+    XLSX.writeFile(wb, fileName);
+    console.log("File written successfully:", fileName);
+  } catch (e) {
+    console.error("Error writing file:", e);
+    alert("Error exporting file: " + e.message);
+  }
 }
-const fileName = `QR_Scan_All_Sessions_${formatDateTimeForFile(new Date())}.xlsx`;
-const wb = XLSX.utils.book_new();
-// Counter for unique sheet names
-let sheetCounter = {};
-// For each session
-sessions.forEach(session => {
-const data = [
-['Number', 'Student ID', 'Location', 'Date', 'Time']
-];
-session.scans.forEach(scan => {
-const scanDate = new Date(scan.time);
-data.push([
-scan.id,
-scan.content,
-session.location,
-formatDate(scanDate),
-formatTime(scanDate)
-]);
-});
-if (data.length > 1) {
-const ws = XLSX.utils.aoa_to_sheet(data);
-// Create unique sheet name
-let baseSheetName = session.location.substring(0, 25).replace(/[^a-z0-9]/gi, '_');
-if (baseSheetName.length === 0) baseSheetName = "Session";
-// Ensure uniqueness
-if (sheetCounter[baseSheetName]) {
-sheetCounter[baseSheetName]++;
-baseSheetName = baseSheetName + "_" + sheetCounter[baseSheetName];
-} else {
-sheetCounter[baseSheetName] = 1;
-}
-// Excel sheet names cannot exceed 31 characters
-const sheetName = baseSheetName.substring(0, 31);
-try {
-XLSX.utils.book_append_sheet(wb, ws, sheetName);
-} catch (e) {
-console.error("Error adding sheet:", e);
-// If there's an error with this sheet, try with a generic name
-XLSX.utils.book_append_sheet(wb, ws, "Session_" + Math.random().toString(36).substring(2, 7));
-}
-}
-});
-try {
-// Save file with error handling
-XLSX.writeFile(wb, fileName);
-console.log("File written successfully:", fileName);
-} catch (e) {
-console.error("Error writing file:", e);
-alert("Error exporting file: " + e.message);
-}
-}
+
 // Add placeholder for success sound function
 function playSuccessSound() {
-// Sound functionality could be added here
-// For now, we just have a placeholder to avoid errors
+  // Sound functionality could be added here
+  // For now, we just have a placeholder to avoid errors
 }
+
 // Helper function to format date for display
 function formatDate(date) {
-return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())}`;
+  return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())}`;
 }
+
 // Helper function to format time for display
 function formatTime(date) {
-return `${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
+  return `${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
 }
+
 // Helper function to format date and time for display
 function formatDateTime(date) {
-return `${formatDate(date)} ${formatTime(date)}`;
+  return `${formatDate(date)} ${formatTime(date)}`;
 }
+
 // Helper function to format date and time for filenames
 function formatDateTimeForFile(date) {
-return `${date.getFullYear()}${padZero(date.getMonth() + 1)}${padZero(date.getDate())}_${padZero(date.getHours())}${padZero(date.getMinutes())}`;
+  return `${date.getFullYear()}${padZero(date.getMonth() + 1)}${padZero(date.getDate())}_${padZero(date.getHours())}${padZero(date.getMinutes())}`;
 }
+
 // Helper function to pad with leading zero
 function padZero(num) {
-return num.toString().padStart(2, '0');
+  return num.toString().padStart(2, '0');
 }
+
 // Helper function to escape HTML to prevent XSS
 function escapeHtml(text) {
-if (!text) return '';
-return text
-.toString()
-.replace(/&/g, "&amp;")
-.replace(/</g, "&lt;")
-.replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;")
-.replace(/'/g, "&#039;");
+  if (!text) return '';
+  return text
+    .toString()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
+
 // Initialize button event handler
 startSessionBtn.addEventListener('click', startSessionBtnHandler);
+
 // When window loads, check if we need to request permissions
 window.addEventListener('load', () => {
-// We request camera permission only when the user starts a session
-// instead of on page load for better user experience
-// Create folder in storage for downloads (this is not fully supported in browsers)
-// Modern browsers don't allow creating directories or choosing save locations
-// for security reasons, but files will be saved according to browser's download settings
+  // We request camera permission only when the user starts a session
+  // instead of on page load for better user experience
+  // Modern browsers don't allow creating directories or choosing save locations
+  // for security reasons, but files will be saved according to browser's download settings
 });
 </script>
 </body>
