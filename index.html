@@ -457,6 +457,12 @@ confirmSessionBtn.addEventListener('click', () => {
     scans: []
   };
   
+  // Save the initial session to storage
+  saveActiveSessionToStorage();
+  
+  // Start auto-save interval
+  startAutoSave();
+  
   // Update UI
   currentLocation.textContent = location;
   currentDateTime.textContent = formattedDateTime;
@@ -474,6 +480,109 @@ confirmSessionBtn.addEventListener('click', () => {
   startSessionBtn.textContent = 'End Session';
   startSessionBtn.removeEventListener('click', startSessionBtnHandler);
   startSessionBtn.addEventListener('click', endSessionHandler);
+});
+
+// Add this to your document ready or initialization code
+function checkForRecovery() {
+  // Check if there's an active session stored
+  const savedActiveSession = localStorage.getItem('qrScannerActiveSession');
+  
+  if (savedActiveSession) {
+    try {
+      const recoveredSession = JSON.parse(savedActiveSession);
+      
+      // Ask user if they want to recover
+      if (confirm(`Found an incomplete scanning session at "${recoveredSession.location}" with ${recoveredSession.scans.length} scans. Do you want to recover it?`)) {
+        // Recover the session
+        recoverSession(recoveredSession);
+      } else {
+        // User declined recovery, clean up
+        clearActiveSessionFromStorage();
+      }
+    } catch (e) {
+      console.error("Error parsing saved session:", e);
+      clearActiveSessionFromStorage();
+    }
+  }
+}
+
+// Function to recover an interrupted session
+function recoverSession(savedSession) {
+  // Set as active session
+  activeSession = savedSession;
+  
+  // Update UI
+  currentLocation.textContent = savedSession.location;
+  currentDateTime.textContent = savedSession.formattedDateTime;
+  sessionInfo.style.display = 'block';
+  
+  // Populate scans table
+  if (savedSession.scans.length > 0) {
+    noScansMessage.style.display = 'none';
+    resultTable.style.display = 'table';
+    
+    resultBody.innerHTML = ''; // Clear any existing rows
+    savedSession.scans.forEach(scan => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${scan.id}</td>
+        <td>${escapeHtml(scan.content)}</td>
+        <td>${scan.formattedTime}</td>
+      `;
+      resultBody.appendChild(row);
+    });
+  }
+  
+  // Update button state
+  startSessionBtn.textContent = 'End Session';
+  startSessionBtn.removeEventListener('click', startSessionBtnHandler);
+  startSessionBtn.addEventListener('click', endSessionHandler);
+  
+  // Start scanning
+  startCamera();
+  
+  // Start auto-save
+  startAutoSave();
+  
+  alert(`Successfully recovered session with ${savedSession.scans.length} scans.`);
+}
+
+// Add this to your initialization code
+document.addEventListener('DOMContentLoaded', function() {
+  console.log("DOM fully loaded");
+  loadSessionsFromStorage();
+  updateHistoryView();
+  
+  // Check for any sessions that need recovery
+  checkForRecovery();
+  
+  // Check if jsQR is already defined (from the script tag in HTML)
+  if (typeof jsQR === 'function') {
+    console.log("jsQR is already loaded from local file");
+    jsQRLoaded = true;
+  } else {
+    console.log("jsQR not detected, will attempt to load");
+    loadJsQR()
+      .then(() => console.log("jsQR library loaded and ready"))
+      .catch(error => {
+        console.error("Error loading jsQR:", error);
+        alert("Failed to load QR code scanning library. Please check your files and try again.");
+      });
+  }
+});
+
+// Add window beforeunload event to warn users if they try to close during active session
+window.addEventListener('beforeunload', function(e) {
+  if (activeSession && activeSession.scans.length > 0) {
+    // Save once more before leaving
+    saveActiveSessionToStorage();
+    
+    // This message might not be shown in modern browsers due to security restrictions,
+    // but the event will still trigger the save
+    const message = `You have an active scanning session with ${activeSession.scans.length} scans. Are you sure you want to leave?`;
+    e.returnValue = message;
+    return message;
+  }
 });
 
 // Improved camera initialization function
@@ -693,6 +802,9 @@ function processScannedCode(data) {
   
   activeSession.scans.push(scan);
   
+  // Auto-save the session after each scan
+  saveActiveSessionToStorage();
+  
   // Update UI
   if (activeSession.scans.length === 1) {
     noScansMessage.style.display = 'none';
@@ -719,6 +831,9 @@ function endSessionHandler() {
   if (scanning) {
     scanning = false;
     
+    // Stop auto-save
+    stopAutoSave();
+    
     // Stop camera
     if (videoStream) {
       videoStream.getTracks().forEach(track => track.stop());
@@ -733,7 +848,8 @@ function endSessionHandler() {
     const scannerUI = document.querySelectorAll('.scanner-ui');
     scannerUI.forEach(el => el.remove());
     
-    // Save session to history
+    // Move active session from storage to sessions history
+    clearActiveSessionFromStorage();
     sessions.push(activeSession);
     saveSessionsToStorage();
     updateHistoryView();
@@ -750,6 +866,43 @@ function endSessionHandler() {
     // Show confirmation
     alert('Session completed and exported successfully!');
   }
+}
+
+// Start auto-save interval
+function startAutoSave() {
+  // Clear any existing interval first
+  stopAutoSave();
+  
+  // Set new interval
+  autoSaveInterval = setInterval(() => {
+    if (activeSession) {
+      saveActiveSessionToStorage();
+      console.log(`Auto-saved session with ${activeSession.scans.length} scans at ${new Date().toLocaleTimeString()}`);
+    }
+  }, AUTO_SAVE_DELAY);
+  
+  console.log("Auto-save started");
+}
+
+// Stop auto-save interval
+function stopAutoSave() {
+  if (autoSaveInterval) {
+    clearInterval(autoSaveInterval);
+    autoSaveInterval = null;
+    console.log("Auto-save stopped");
+  }
+}
+
+// Save active session to localStorage
+function saveActiveSessionToStorage() {
+  if (activeSession) {
+    localStorage.setItem('qrScannerActiveSession', JSON.stringify(activeSession));
+  }
+}
+
+// Clear active session from localStorage
+function clearActiveSessionFromStorage() {
+  localStorage.removeItem('qrScannerActiveSession');
 }
 
 // Handler for start session button
