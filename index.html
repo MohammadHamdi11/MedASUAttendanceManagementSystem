@@ -854,39 +854,55 @@ autoSaveInterval = null;
 }
 // End session handler
 function endSessionHandler() {
-if (!activeSession) return;
-// Confirm if there are no scans
-if (activeSession.scans.length === 0) {
-if (!confirm("No scans detected in this session. Do you still want to end it?")) {
-return;
-}
-}
-// Stop scanner and auto-save
-stopScanner();
-stopAutoSave();
-// Mark session as completed
-activeSession.inProgress = false;
-activeSession = null;
-// Clear active session storage since it's complete
-localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
-localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
-// Save sessions to storage
-saveSessionsToStorage();
-// Update UI
-sessionInfo.style.display = 'none';
-startSessionBtn.textContent = 'Start New Session';
-startSessionBtn.removeEventListener('click', endSessionHandler);
-startSessionBtn.addEventListener('click', startSessionBtnHandler);
-// Update history view
-updateHistoryView();
-// If online, trigger automatic backup
-if (navigator.onLine) {
-const autoBackupEnabled = localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) !== 'false';
-if (autoBackupEnabled) {
-console.log("Automatic backup after session end");
-tryAutoBackup();
-}
-}
+  if (!activeSession) return;
+  
+  // Confirm if there are no scans
+  if (activeSession.scans.length === 0) {
+    if (!confirm("No scans detected in this session. Do you still want to end it?")) {
+      return;
+    }
+  }
+  
+  // Stop scanner and auto-save
+  stopScanner();
+  stopAutoSave();
+  
+  // Mark session as completed
+  activeSession.inProgress = false;
+  
+  // Save sessions to storage before clearing active session
+  saveSessionsToStorage();
+  
+  // Clear active session storage since it's complete
+  localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+  localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+  
+  // Reset active session
+  const completedSession = activeSession;
+  activeSession = null;
+  
+  // Update UI
+  sessionInfo.style.display = 'none';
+  startSessionBtn.textContent = 'Start New Session';
+  startSessionBtn.removeEventListener('click', endSessionHandler);
+  startSessionBtn.addEventListener('click', startSessionBtnHandler);
+  
+  // Update history view
+  updateHistoryView();
+  
+  // If online, trigger automatic backup immediately - not waiting for conditions
+  if (navigator.onLine) {
+    console.log("Starting backup after session end");
+    backupToGitHub(true)
+      .then(() => {
+        console.log("Session end backup completed successfully");
+      })
+      .catch(error => {
+        console.error("Session end backup failed:", error);
+      });
+  } else {
+    console.log("Cannot backup: offline. Will attempt when back online.");
+  }
 }
 // Start session button handler
 function startSessionBtnHandler() {
