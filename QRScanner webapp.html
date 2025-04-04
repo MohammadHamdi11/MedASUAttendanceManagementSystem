@@ -297,7 +297,7 @@ margin: 10% auto;
 <!-- Script for Excel Export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-// DOM Elements
+//======== DOM ELEMENTS ========//
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 const startSessionBtn = document.getElementById('startSessionBtn');
@@ -323,7 +323,7 @@ const detailsBody = document.getElementById('detailsBody');
 const exportSessionBtn = document.getElementById('exportSessionBtn');
 const closeDetailsBtn = document.getElementById('closeDetailsBtn');
 const sortBy = document.getElementById('sortBy');
-// Application State
+//======== APPLICATION STATE ========//
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
 let canvas = canvasElement.getContext('2d');
@@ -338,7 +338,8 @@ let autoSaveInterval = null;
 const AUTO_SAVE_DELAY = 3000; // 3 seconds
 const ACTIVE_SESSION_STORAGE_KEY = 'qrScannerActiveSession';
 const COMPLETED_SESSIONS_STORAGE_KEY = 'qrScannerSessions';
-const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex'; // For tracking in-progress session in history
+const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex'; 
+//======== INITIALIZATION ========//
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
 console.log("DOM fully loaded");
@@ -387,7 +388,7 @@ reject(error);
 document.head.appendChild(script);
 });
 }
-// Register Service Worker for PWA functionality
+//======== SERVICE WORKER REGISTRATION FOR PWA ========//
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js')
@@ -399,7 +400,7 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
-// Tab Navigation
+//======== UI NAVIGATION & EVENT HANDLERS ========//
 tabs.forEach(tab => {
 tab.addEventListener('click', () => {
 const tabId = tab.getAttribute('data-tab');
@@ -479,6 +480,7 @@ startSessionBtn.addEventListener('click', endSessionHandler);
 // Update history view to show the new session
 updateHistoryView();
 });
+//======== SESSION MANAGEMENT ========//
 // Start auto-save interval
 function startAutoSave() {
 // Clear any existing interval
@@ -504,6 +506,7 @@ clearInterval(autoSaveInterval);
 autoSaveInterval = null;
 }
 }
+//======== CAMERA & SCANNER FUNCTIONS ========//
 // Improved camera initialization function
 async function startCamera() {
 try {
@@ -749,6 +752,7 @@ updateScanStatus('Waiting for camera...');
 // Continue scanning
 requestAnimationFrame(scanQRCode);
 }
+//======== QR DATA PROCESSING ========//
 // Process scanned QR code 
 function processScannedCode(data) {
 // Additional validation to ensure we're not adding empty codes
@@ -887,6 +891,7 @@ exportSession(session);
 closeDetailsBtn.addEventListener('click', () => {
 sessionDetails.style.display = 'none';
 });
+//======== SESSION STORAGE & RECOVERY ========//
 // Save active session to local storage
 function saveActiveSession() {
 if (activeSession) {
@@ -1055,6 +1060,7 @@ event.returnValue = message;
 return message;
 }
 }
+//======== HISTORY & DISPLAY FUNCTIONS ========//
 // Update history view with sessions
 function updateHistoryView() {
 if (sessions.length === 0) {
@@ -1150,6 +1156,7 @@ detailsBody.appendChild(row);
 });
 sessionDetails.style.display = 'block';
 }
+//======== EXPORT FUNCTIONS ========//
 // Export single session to Excel
 function exportSession(session) {
 if (!window.XLSX) {
@@ -1238,6 +1245,7 @@ console.error("Error writing file:", e);
 alert("Error exporting file: " + e.message);
 }
 }
+//======== HELPER FUNCTIONS ========//
 // Add placeholder for success sound function
 function playSuccessSound() {
 // Sound functionality could be added here
