@@ -297,6 +297,7 @@ margin: 10% auto;
 <!-- Script for Excel Export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+// Modified code to save sessions to history while scanning
 // DOM Elements
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
@@ -338,6 +339,7 @@ let autoSaveInterval = null;
 const AUTO_SAVE_DELAY = 3000; // 3 seconds
 const ACTIVE_SESSION_STORAGE_KEY = 'qrScannerActiveSession';
 const COMPLETED_SESSIONS_STORAGE_KEY = 'qrScannerSessions';
+const TEMP_SESSION_INDEX_KEY = 'qrScannerTempSessionIndex'; // For tracking in-progress session in history
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
 console.log("DOM fully loaded");
@@ -447,8 +449,14 @@ id: sessionId,
 location: location,
 dateTime: now.toISOString(),
 formattedDateTime: formattedDateTime,
-scans: []
+scans: [],
+inProgress: true // Flag to indicate session is in progress
 };
+// Add the session to the completed sessions array immediately
+// This ensures it's in history even if app crashes
+sessions.push(activeSession);
+// Save the session index for recovery purposes
+localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
 // Update UI
 currentLocation.textContent = location;
 currentDateTime.textContent = formattedDateTime;
@@ -461,12 +469,16 @@ resultTable.style.display = 'none';
 noScansMessage.style.display = 'block';
 // Start auto-save interval
 startAutoSave();
-// Save the active session immediately
+// Save all sessions to storage
+saveSessionsToStorage();
+// Save the active session separately for recovery
 saveActiveSession();
 // Update button
 startSessionBtn.textContent = 'End Session';
 startSessionBtn.removeEventListener('click', startSessionBtnHandler);
 startSessionBtn.addEventListener('click', endSessionHandler);
+// Update history view to show the new session
+updateHistoryView();
 });
 // Start auto-save interval
 function startAutoSave() {
@@ -477,8 +489,12 @@ clearInterval(autoSaveInterval);
 // Set new interval
 autoSaveInterval = setInterval(() => {
 if (activeSession) {
-console.log("Auto-saving active session...");
+console.log("Auto-saving session data...");
+// Save to both active session storage and the history
 saveActiveSession();
+saveSessionsToStorage();
+// Update history view to reflect changes
+updateHistoryView();
 }
 }, AUTO_SAVE_DELAY);
 }
@@ -663,7 +679,7 @@ updateScanStatus('Waiting for camera...');
 // Continue scanning
 requestAnimationFrame(scanQRCode);
 }
-// Process scanned QR code
+// Process scanned QR code - MODIFIED TO UPDATE HISTORY
 function processScannedCode(data) {
 const now = new Date();
 const scan = {
@@ -672,6 +688,7 @@ content: data,
 time: now.toISOString(),
 formattedTime: formatTime(now)
 };
+// Add to active session
 activeSession.scans.push(scan);
 // Update UI
 if (activeSession.scans.length === 1) {
@@ -685,8 +702,16 @@ row.innerHTML = `
 <td>${scan.formattedTime}</td>
 `;
 resultBody.appendChild(row);
-// Save session after each scan
+// Find the session in the sessions array and update it
+const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+if (sessionIndex !== -1) {
+sessions[sessionIndex] = {...activeSession};
+}
+// Save both active session and completed sessions
 saveActiveSession();
+saveSessionsToStorage();
+// No need to update history view here as it's updated in the auto-save interval
+// This avoids too many UI updates which could slow down the app
 }
 // End current scanning session
 function endSessionHandler() {
@@ -705,14 +730,22 @@ scannerPlaceholder.style.display = 'block';
 // Clean up UI elements
 const scannerUI = document.querySelectorAll('.scanner-ui');
 scannerUI.forEach(el => el.remove());
-// Move active session to completed sessions
-sessions.push(activeSession);
+// Update session status in the array
+const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+if (sessionIndex !== -1) {
+// Update the session to mark it as completed
+sessions[sessionIndex].inProgress = false;
+// Save to storage
 saveSessionsToStorage();
-// Clear the active session storage
-clearActiveSession();
+// Update history view
 updateHistoryView();
 // Auto-export this session
-exportSession(activeSession);
+exportSession(sessions[sessionIndex]);
+}
+// Clear the active session storage
+clearActiveSession();
+// Clear the temp session index
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
 // Reset UI
 sessionInfo.style.display = 'none';
 startSessionBtn.textContent = 'Start Scanning Session';
@@ -720,6 +753,8 @@ startSessionBtn.removeEventListener('click', endSessionHandler);
 startSessionBtn.addEventListener('click', startSessionBtnHandler);
 // Show confirmation
 alert('Session completed and exported successfully!');
+// Reset active session
+activeSession = null;
 }
 }
 // Handler for start session button
@@ -790,15 +825,16 @@ console.error("Error saving active session:", error);
 function clearActiveSession() {
 try {
 localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
-activeSession = null;
 } catch (error) {
 console.error("Error clearing active session:", error);
 }
 }
-// Check if there's a recoverable session
+// Modified: Check if there's a recoverable session
 function checkForRecoverableSession() {
 try {
+// First check for active session
 const savedActiveSession = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+const tempSessionIndex = localStorage.getItem(TEMP_SESSION_INDEX_KEY);
 if (savedActiveSession) {
 const parsedSession = JSON.parse(savedActiveSession);
 if (parsedSession && parsedSession.id && parsedSession.scans && parsedSession.scans.length > 0) {
@@ -807,22 +843,53 @@ if (result) {
 // Recover the session
 recoverSession(parsedSession);
 } else {
+// Mark the session as completed in history if it exists there
+const sessionIndex = sessions.findIndex(s => s.id === parsedSession.id);
+if (sessionIndex !== -1) {
+sessions[sessionIndex].inProgress = false;
+saveSessionsToStorage();
+}
 // Clear the session
 clearActiveSession();
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+}
+return; // Don't proceed to next check if we've handled this one
+}
+}
+// If no active session, check if there's a session in progress in history
+if (tempSessionIndex !== null) {
+const index = parseInt(tempSessionIndex);
+if (!isNaN(index) && index >= 0 && index < sessions.length) {
+const tempSession = sessions[index];
+if (tempSession && tempSession.inProgress) {
+const result = confirm(`Found an incomplete scanning session at ${tempSession.location} with ${tempSession.scans.length} scans in history. Would you like to recover it?`);
+if (result) {
+// Recover the session from history
+recoverSession(tempSession);
+} else {
+// Mark as completed
+sessions[index].inProgress = false;
+saveSessionsToStorage();
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+}
 }
 } else {
-// Invalid session data, clear it
-clearActiveSession();
+// Invalid index, clear it
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
 }
 }
 } catch (error) {
 console.error("Error checking for recoverable session:", error);
+// Clear potentially corrupted data
 clearActiveSession();
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
 }
 }
-// Recover active session
+// Recover active session - MODIFIED
 function recoverSession(session) {
 activeSession = session;
+// Make sure the session has inProgress flag set
+activeSession.inProgress = true;
 // Update UI
 currentLocation.textContent = session.location;
 currentDateTime.textContent = session.formattedDateTime;
@@ -844,6 +911,23 @@ resultBody.appendChild(row);
 } else {
 noScansMessage.style.display = 'block';
 resultTable.style.display = 'none';
+}
+// Check if session exists in the sessions array
+const sessionIndex = sessions.findIndex(s => s.id === session.id);
+if (sessionIndex === -1) {
+// Session doesn't exist in sessions array, add it
+sessions.push(session);
+} else {
+// Update existing session
+sessions[sessionIndex] = {...session};
+}
+// Save to storage
+saveSessionsToStorage();
+saveActiveSession();
+// Store the session index for recovery
+const index = sessions.findIndex(s => s.id === session.id);
+if (index !== -1) {
+localStorage.setItem(TEMP_SESSION_INDEX_KEY, index);
 }
 // Switch to scanner tab
 tabs.forEach(t => t.classList.remove('active'));
@@ -887,6 +971,7 @@ function handleBeforeUnload(event) {
 if (activeSession) {
 // Save one last time
 saveActiveSession();
+saveSessionsToStorage();
 // Show confirmation dialog
 const message = "You have an active scanning session. Are you sure you want to leave?";
 event.returnValue = message;
@@ -917,10 +1002,15 @@ sortedSessions.forEach(session => {
 const card = document.createElement('div');
 card.className = 'card history-item';
 card.setAttribute('data-id', session.id);
+// Add class to indicate in-progress sessions
+if (session.inProgress) {
+card.classList.add('in-progress');
+card.style.borderLeft = '4px solid #FF3B58';
+}
 card.innerHTML = `
 <div class="flex-between">
 <div>
-<h3>${escapeHtml(session.location)}</h3>
+<h3>${escapeHtml(session.location)}${session.inProgress ? ' <span style="color:#FF3B58">(In Progress)</span>' : ''}</h3>
 <p>${session.formattedDateTime}</p>
 </div>
 <div>
