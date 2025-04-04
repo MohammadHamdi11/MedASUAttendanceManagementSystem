@@ -433,83 +433,70 @@ sessionModal.style.display = 'none';
 });
 // Start new scanning session
 confirmSessionBtn.addEventListener('click', () => {
-    const location = locationInput.value.trim();
-    if (!location) {
-        alert('Please enter a location');
-        return;
-    }
-    
-    // Hide modal
-    sessionModal.style.display = 'none';
-    
-    // Create new session
-    const now = new Date();
-    const sessionId = `session_${now.getTime()}`;
-    const formattedDateTime = formatDateTime(now);
-    activeSession = {
-        id: sessionId,
-        location: location,
-        dateTime: now.toISOString(),
-        formattedDateTime: formattedDateTime,
-        scans: [],
-        inProgress: true // Flag to indicate session is in progress
-    };
-    
-    // Add the session to the completed sessions array immediately
-    // This ensures it's in history even if app crashes
-    sessions.push(activeSession);
-    
-    // Save the session index for recovery purposes
-    localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
-    
-    // Update UI
-    currentLocation.textContent = location;
-    currentDateTime.textContent = formattedDateTime;
-    sessionInfo.style.display = 'block';
-    
-    // Start camera
-    startCamera();
-    
-    // Clear previous results
-    resultBody.innerHTML = '';
-    resultTable.style.display = 'none';
-    noScansMessage.style.display = 'block';
-    
-    // Start auto-save interval
-    startAutoSave();
-    
-    // Save all sessions to storage
-    saveSessionsToStorage();
-    
-    // Save the active session separately for recovery
-    saveActiveSession();
-    
-    // Update button
-    startSessionBtn.textContent = 'End Session';
-    startSessionBtn.removeEventListener('click', startSessionBtnHandler);
-    startSessionBtn.addEventListener('click', endSessionHandler);
-    
-    // Update history view to show the new session
-    updateHistoryView();
+const location = locationInput.value.trim();
+if (!location) {
+alert('Please enter a location');
+return;
+}
+// Hide modal
+sessionModal.style.display = 'none';
+// Create new session
+const now = new Date();
+const sessionId = `session_${now.getTime()}`;
+const formattedDateTime = formatDateTime(now);
+activeSession = {
+id: sessionId,
+location: location,
+dateTime: now.toISOString(),
+formattedDateTime: formattedDateTime,
+scans: [],
+inProgress: true // Flag to indicate session is in progress
+};
+// Add the session to the completed sessions array immediately
+// This ensures it's in history even if app crashes
+sessions.push(activeSession);
+// Save the session index for recovery purposes
+localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
+// Update UI
+currentLocation.textContent = location;
+currentDateTime.textContent = formattedDateTime;
+sessionInfo.style.display = 'block';
+// Start camera
+startCamera();
+// Clear previous results
+resultBody.innerHTML = '';
+resultTable.style.display = 'none';
+noScansMessage.style.display = 'block';
+// Start auto-save interval
+startAutoSave();
+// Save all sessions to storage
+saveSessionsToStorage();
+// Save the active session separately for recovery
+saveActiveSession();
+// Update button
+startSessionBtn.textContent = 'End Session';
+startSessionBtn.removeEventListener('click', startSessionBtnHandler);
+startSessionBtn.addEventListener('click', endSessionHandler);
+// Update history view to show the new session
+updateHistoryView();
 });
 // Start auto-save interval
 function startAutoSave() {
-    // Clear any existing interval
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-    }
-    
-    // Set new interval
-    autoSaveInterval = setInterval(() => {
-        if (activeSession) {
-            console.log("Auto-saving session data...");
-            // Save to both active session storage and the history
-            saveActiveSession();
-            saveSessionsToStorage();
-            // Update history view to reflect changes
-            updateHistoryView();
-        }
-    }, AUTO_SAVE_DELAY);
+// Clear any existing interval
+if (autoSaveInterval) {
+clearInterval(autoSaveInterval);
+}
+// Set new interval
+autoSaveInterval = setInterval(() => {
+if (activeSession) {
+console.log("Auto-saving session data...");
+// Save to both active session storage and the history
+saveActiveSession();
+saveSessionsToStorage();
+// Update history view to reflect changes
+updateHistoryView();
+}
+}, AUTO_SAVE_DELAY);
 }
 // Stop auto-save interval
 function stopAutoSave() {
@@ -766,51 +753,44 @@ requestAnimationFrame(scanQRCode);
 }
 // Process scanned QR code 
 function processScannedCode(data) {
-    // Additional validation to ensure we're not adding empty codes
-    if (!data || data.trim() === '') {
-        console.error("Attempted to process empty QR code data");
-        updateScanStatus('Error: Empty QR code data');
-        addScanLogEntry('Empty QR code data - not saved', 'error');
-        return;
-    }
-    
-    const now = new Date();
-    const scan = {
-        id: activeSession.scans.length + 1,
-        content: data,
-        time: now.toISOString(),
-        formattedTime: formatTime(now)
-    };
-    
-    // Add to active session
-    activeSession.scans.push(scan);
-    
-    // Update UI
-    if (activeSession.scans.length === 1) {
-        noScansMessage.style.display = 'none';
-        resultTable.style.display = 'table';
-    }
-    
-    const row = document.createElement('tr');
-    row.innerHTML = `
-        <td>${scan.id}</td>
-        <td>${escapeHtml(scan.content)}</td>
-        <td>${scan.formattedTime}</td>
-    `;
-    resultBody.appendChild(row);
-    
-    // Find the session in the sessions array and update it
-    const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
-    if (sessionIndex !== -1) {
-        sessions[sessionIndex] = {...activeSession};
-    }
-    
-    // Save both active session and completed sessions
-    saveActiveSession();
-    saveSessionsToStorage();
-    
-    // Add to scan log
-    addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}`, 'success');
+// Additional validation to ensure we're not adding empty codes
+if (!data || data.trim() === '') {
+console.error("Attempted to process empty QR code data");
+updateScanStatus('Error: Empty QR code data');
+addScanLogEntry('Empty QR code data - not saved', 'error');
+return;
+}
+const now = new Date();
+const scan = {
+id: activeSession.scans.length + 1,
+content: data,
+time: now.toISOString(),
+formattedTime: formatTime(now)
+};
+// Add to active session
+activeSession.scans.push(scan);
+// Update UI
+if (activeSession.scans.length === 1) {
+noScansMessage.style.display = 'none';
+resultTable.style.display = 'table';
+}
+const row = document.createElement('tr');
+row.innerHTML = `
+<td>${scan.id}</td>
+<td>${escapeHtml(scan.content)}</td>
+<td>${scan.formattedTime}</td>
+`;
+resultBody.appendChild(row);
+// Find the session in the sessions array and update it
+const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+if (sessionIndex !== -1) {
+sessions[sessionIndex] = {...activeSession};
+}
+// Save both active session and completed sessions
+saveActiveSession();
+saveSessionsToStorage();
+// Add to scan log
+addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}`, 'success');
 }
 // End current scanning session
 function endSessionHandler() {
