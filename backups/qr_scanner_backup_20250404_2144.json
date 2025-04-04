@@ -1,0 +1,296 @@
+[
+  {
+    "id": "session_1743769886694",
+    "location": "Idhfhf",
+    "dateTime": "2025-04-04T12:31:26.694Z",
+    "formattedDateTime": "2025-04-04 14:31:26",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:31:30.362Z",
+        "formattedTime": "14:31:30"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743770529410",
+    "location": "Fccic",
+    "dateTime": "2025-04-04T12:42:09.410Z",
+    "formattedDateTime": "2025-04-04 14:42:09",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:42:14.470Z",
+        "formattedTime": "14:42:14"
+      },
+      {
+        "id": 2,
+        "content": "231249",
+        "time": "2025-04-04T12:42:17.567Z",
+        "formattedTime": "14:42:17"
+      },
+      {
+        "id": 3,
+        "content": "231249",
+        "time": "2025-04-04T12:42:21.710Z",
+        "formattedTime": "14:42:21"
+      },
+      {
+        "id": 4,
+        "content": "231249",
+        "time": "2025-04-04T12:42:24.793Z",
+        "formattedTime": "14:42:24"
+      },
+      {
+        "id": 5,
+        "content": "231249",
+        "time": "2025-04-04T12:42:27.866Z",
+        "formattedTime": "14:42:27"
+      },
+      {
+        "id": 6,
+        "content": "231249",
+        "time": "2025-04-04T12:42:30.973Z",
+        "formattedTime": "14:42:30"
+      },
+      {
+        "id": 7,
+        "content": "231249",
+        "time": "2025-04-04T12:42:34.475Z",
+        "formattedTime": "14:42:34"
+      },
+      {
+        "id": 8,
+        "content": "231249",
+        "time": "2025-04-04T12:42:37.746Z",
+        "formattedTime": "14:42:37"
+      },
+      {
+        "id": 9,
+        "content": "231249",
+        "time": "2025-04-04T12:42:41.571Z",
+        "formattedTime": "14:42:41"
+      },
+      {
+        "id": 10,
+        "content": "231249",
+        "time": "2025-04-04T12:42:44.651Z",
+        "formattedTime": "14:42:44"
+      },
+      {
+        "id": 11,
+        "content": "231249",
+        "time": "2025-04-04T12:42:51.618Z",
+        "formattedTime": "14:42:51"
+      },
+      {
+        "id": 12,
+        "content": "231249",
+        "time": "2025-04-04T12:42:54.829Z",
+        "formattedTime": "14:42:54"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743770589769",
+    "location": "Fccic",
+    "dateTime": "2025-04-04T12:43:09.769Z",
+    "formattedDateTime": "2025-04-04 14:43:09",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:43:14.044Z",
+        "formattedTime": "14:43:14"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743771142652",
+    "location": "Fhgf",
+    "dateTime": "2025-04-04T12:52:22.652Z",
+    "formattedDateTime": "2025-04-04 14:52:22",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:52:26.541Z",
+        "formattedTime": "14:52:26"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743771166746",
+    "location": "Jbshsbmomo",
+    "dateTime": "2025-04-04T12:52:46.746Z",
+    "formattedDateTime": "2025-04-04 14:52:46",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:52:49.602Z",
+        "formattedTime": "14:52:49"
+      },
+      {
+        "id": 2,
+        "content": "231249",
+        "time": "2025-04-04T12:52:53.356Z",
+        "formattedTime": "14:52:53"
+      },
+      {
+        "id": 3,
+        "content": "231249",
+        "time": "2025-04-04T12:53:07.118Z",
+        "formattedTime": "14:53:07"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743771208306",
+    "location": "Issjhhoo",
+    "dateTime": "2025-04-04T12:53:28.306Z",
+    "formattedDateTime": "2025-04-04 14:53:28",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:53:30.299Z",
+        "formattedTime": "14:53:30"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743771345144",
+    "location": "Fhfc",
+    "dateTime": "2025-04-04T12:55:45.144Z",
+    "formattedDateTime": "2025-04-04 14:55:45",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:55:48.451Z",
+        "formattedTime": "14:55:48"
+      },
+      {
+        "id": 2,
+        "content": "231249",
+        "time": "2025-04-04T12:56:01.356Z",
+        "formattedTime": "14:56:01"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743771373635",
+    "location": "Lolo",
+    "dateTime": "2025-04-04T12:56:13.635Z",
+    "formattedDateTime": "2025-04-04 14:56:13",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T12:56:16.385Z",
+        "formattedTime": "14:56:16"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743772916359",
+    "location": "Fhj",
+    "dateTime": "2025-04-04T13:21:56.359Z",
+    "formattedDateTime": "2025-04-04 15:21:56",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T13:22:01.141Z",
+        "formattedTime": "15:22:01"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743776154542",
+    "location": "Hghb",
+    "dateTime": "2025-04-04T14:15:54.542Z",
+    "formattedDateTime": "2025-04-04 16:15:54",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T14:15:58.071Z",
+        "formattedTime": "16:15:58"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743776719621",
+    "location": "Gfcb",
+    "dateTime": "2025-04-04T14:25:19.621Z",
+    "formattedDateTime": "2025-04-04 16:25:19",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T14:25:22.542Z",
+        "formattedTime": "16:25:22"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743779558951",
+    "location": "Hgfg",
+    "dateTime": "2025-04-04T15:12:38.951Z",
+    "formattedDateTime": "2025-04-04 17:12:38",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T15:12:43.620Z",
+        "formattedTime": "17:12:43"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743780088459",
+    "location": "Igh",
+    "dateTime": "2025-04-04T15:21:28.459Z",
+    "formattedDateTime": "2025-04-04 17:21:28",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T15:21:29.991Z",
+        "formattedTime": "17:21:29"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743780660245",
+    "location": "Ughh",
+    "dateTime": "2025-04-04T15:31:00.245Z",
+    "formattedDateTime": "2025-04-04 17:31:00",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-04T15:31:06.365Z",
+        "formattedTime": "17:31:06"
+      }
+    ],
+    "inProgress": false
+  }
+]
