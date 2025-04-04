@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QR Code Scanner</title>
 <!-- PWA Meta Tags -->
-<meta name="theme-color" content="#4CAF50">
+<meta name="theme-color" content="#24325f">
 <meta name="description" content="A QR code scanner application">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -587,7 +587,7 @@ function setupScannerUI() {
     scanFrame.style.transform = 'translate(-50%, -50%)';
     scanFrame.style.width = '200px';
     scanFrame.style.height = '200px';
-    scanFrame.style.border = '2px solid #4CAF50';
+    scanFrame.style.border = '2px solid #24325f';
     scanFrame.style.borderRadius = '10px';
     scanFrame.style.boxShadow = '0 0 0 2000px rgba(0, 0, 0, 0.3)';
     scanFrame.style.zIndex = '99';
@@ -635,7 +635,7 @@ function highlightQR(location) {
     if (frame) {
         frame.style.borderColor = '#FF3B58';
         setTimeout(() => {
-            frame.style.borderColor = '#4CAF50';
+            frame.style.borderColor = '#24325f';
         }, 500);
     }
 }
