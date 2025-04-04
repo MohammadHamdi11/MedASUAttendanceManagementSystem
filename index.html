@@ -293,7 +293,7 @@ margin: 10% auto;
 </div>
 </div>
 <!-- Script for QR Code Scanning -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="jsQR.min.js"></script>
 <!-- Script for Excel Export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -335,7 +335,28 @@ let activeSessionId = null;
 let lastScannedCodes = new Set(); // For avoiding duplicate scans in quick succession
 let jsQRLoaded = false;
 
-// Pre-load the jsQR library
+// Check if jsQR is already loaded from the local file
+document.addEventListener('DOMContentLoaded', function() {
+  console.log("DOM fully loaded");
+  loadSessionsFromStorage();
+  updateHistoryView();
+  
+  // Check if jsQR is already defined (from the script tag in HTML)
+  if (typeof jsQR === 'function') {
+    console.log("jsQR is already loaded from local file");
+    jsQRLoaded = true;
+  } else {
+    console.log("jsQR not detected, will attempt to load");
+    loadJsQR()
+      .then(() => console.log("jsQR library loaded and ready"))
+      .catch(error => {
+        console.error("Error loading jsQR:", error);
+        alert("Failed to load QR code scanning library. Please check your files and try again.");
+      });
+  }
+});
+
+// Modified function to load jsQR from local file
 function loadJsQR() {
   return new Promise((resolve, reject) => {
     // Check if jsQR is already loaded
@@ -345,22 +366,19 @@ function loadJsQR() {
       return;
     }
     
-    // Create a new script element
+    // Create a new script element to load the local file
     const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
-    script.integrity = 'sha512-e0TomLMGRmUz/CIb4HZeFgz0BrIAIeKc4kcDEcvEbAzDi9ShpVbW2/TP9K3X9q2T+Mn25hHrkCIwQwlG3aIBcw==';
-    script.crossOrigin = 'anonymous';
-    script.referrerPolicy = 'no-referrer';
+    script.src = 'jsQR.min.js'; // Local file path
     
     // Set event handlers
     script.onload = () => {
-      console.log("jsQR loaded successfully");
+      console.log("jsQR loaded successfully from local file");
       jsQRLoaded = true;
       resolve(true);
     };
     
     script.onerror = (error) => {
-      console.error("Failed to load jsQR:", error);
+      console.error("Failed to load local jsQR:", error);
       reject(error);
     };
     
@@ -368,21 +386,6 @@ function loadJsQR() {
     document.head.appendChild(script);
   });
 }
-
-// Initialize Application
-document.addEventListener('DOMContentLoaded', function() {
-  console.log("DOM fully loaded");
-  loadSessionsFromStorage();
-  updateHistoryView();
-  
-  // Attempt to load jsQR
-  loadJsQR()
-    .then(() => console.log("jsQR library loaded and ready"))
-    .catch(error => {
-      console.error("Error loading jsQR:", error);
-      alert("Failed to load QR code scanning library. Please check your internet connection and try again.");
-    });
-});
 
 // Register Service Worker for PWA functionality
 if ('serviceWorker' in navigator) {
@@ -418,7 +421,7 @@ startSessionBtn.addEventListener('click', () => {
         locationInput.focus();
       })
       .catch(() => {
-        alert("Failed to load QR scanning library. Please refresh the page and try again.");
+        alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
       });
   } else {
     sessionModal.style.display = 'block';
@@ -597,7 +600,7 @@ function highlightQR(location) {
   }
 }
 
-// Main QR code scanning function
+// Enhanced QR code scanning function with additional debugging
 function scanQRCode() {
   if (!scanning) return;
   
@@ -617,10 +620,13 @@ function scanQRCode() {
         return;
       }
       
-      // Verify jsQR is available
+      // Add debug information
+      updateScanStatus(`Scanning: ${imageData.width}x${imageData.height}`);
+      
+      // Verify jsQR is available with additional logging
       if (typeof jsQR !== 'function') {
-        console.error("jsQR is not available");
-        updateScanStatus('QR scanner library not loaded');
+        console.error("jsQR is not available. Current value:", jsQR);
+        updateScanStatus('QR scanner not loaded correctly');
         
         // Try to reload the library
         loadJsQR().catch(err => console.error("Failed to reload jsQR:", err));
@@ -629,7 +635,9 @@ function scanQRCode() {
         return;
       }
       
-      // Process with jsQR
+      console.log("Attempting to decode QR with dimensions:", imageData.width, "x", imageData.height);
+      
+      // Process with jsQR with try-catch for better error reporting
       try {
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: "dontInvert"
@@ -659,12 +667,14 @@ function scanQRCode() {
         }
       } catch (qrError) {
         console.error("jsQR processing error:", qrError);
-        updateScanStatus('QR processing error');
+        updateScanStatus('QR processing error: ' + qrError.message);
       }
     } catch (error) {
       console.error("Error in scan process:", error);
-      updateScanStatus('Error in scan process');
+      updateScanStatus('Error in scan process: ' + error.message);
     }
+  } else {
+    updateScanStatus('Waiting for camera...');
   }
   
   // Continue scanning
@@ -752,7 +762,7 @@ function startSessionBtnHandler() {
         locationInput.focus();
       })
       .catch(() => {
-        alert("Failed to load QR scanning library. Please refresh the page and try again.");
+        alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
       });
   } else {
     sessionModal.style.display = 'block';
