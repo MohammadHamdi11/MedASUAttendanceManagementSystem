@@ -297,7 +297,6 @@ margin: 10% auto;
 <!-- Script for Excel Export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-// Modified code to save sessions to history while scanning
 // DOM Elements
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
@@ -362,7 +361,7 @@ alert("Failed to load QR code scanning library. Please check your files and try 
 // Add beforeunload event listener to prevent accidental closing during active session
 window.addEventListener('beforeunload', handleBeforeUnload);
 });
-// Modified function to load jsQR from local file
+// Load jsQR from local file
 function loadJsQR() {
 return new Promise((resolve, reject) => {
 // Check if jsQR is already loaded
@@ -604,7 +603,6 @@ scanLogPanel.style.fontSize = '14px';
 scanLogPanel.style.zIndex = '100';
 scanLogPanel.innerHTML = '<div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Scan Log</div>';
 document.querySelector('.scanner-container').appendChild(scanLogPanel);
-// Keep canvas in the DOM but make it invisible
 // This is crucial for QR detection to work
 canvasElement.className = 'scanner-ui';
 canvasElement.style.position = 'absolute';
@@ -612,7 +610,7 @@ canvasElement.style.top = '0';
 canvasElement.style.left = '0';
 canvasElement.style.width = '100%';
 canvasElement.style.height = '100%';
-canvasElement.style.display = 'none'; // Hide but keep in DOM
+canvasElement.style.display = 'none'; 
 document.querySelector('.scanner-container').appendChild(canvasElement);
 }
 // Add a log entry to the scan log
@@ -908,7 +906,7 @@ localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
 console.error("Error clearing active session:", error);
 }
 }
-// Modified: Check if there's a recoverable session
+// Check if there's a recoverable session
 function checkForRecoverableSession() {
 try {
 // First check for active session
@@ -964,7 +962,7 @@ clearActiveSession();
 localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
 }
 }
-// Recover active session - MODIFIED
+// Recover active session 
 function recoverSession(session) {
 activeSession = session;
 // Make sure the session has inProgress flag set
@@ -1160,7 +1158,7 @@ alert("Export functionality is not available. Please check your internet connect
 return;
 }
 const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
-// Prepare data with modified column headers
+// Prepare data 
 const data = [
 ['Number', 'Student ID', 'Location', 'Date', 'Time']
 ];
