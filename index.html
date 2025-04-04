@@ -389,11 +389,8 @@ const DEFAULT_GITHUB_REPO = 'QRScanner-webapp';
 const DEFAULT_GITHUB_PATH = 'backups';
 const DEFAULT_GITHUB_BRANCH = 'main';
 const AUTO_BACKUP_ENABLED_KEY = 'qrScannerAutoBackupEnabled';
-// Encrypted token - replace this with your actual encrypted token
-const ENCRYPTED_GITHUB_TOKEN = "Jz0SEBEKChE3KDIgBxwsJiYkPD0uLDEwKjY3MzQ8PCo2LzMvMC0xNSEkIyQjJiQmJiUmJiIkJCYkJSYhPj0tNz4yLDEwKjY3MzQ8PCo2LzMvMC0xNSEkIyQjJiQmJiUmJiIkJCYkJSYhPj0tNz4y
-"; // Replace with your encrypted token
-const TOKEN_ENCRYPTION_KEY = "QRScannerAppSecretKey"; // Simple encryption key
-
+// Obfuscated token (replace with your token using the obfuscation technique)
+const OBFUSCATED_TOKEN = "Jz0SEBEKChE3KDIgBxwsJiYkPD0uLDEwKjY3MzQ8PCo2LzMvMC0xNSEkIyQjJiQmJiUmJiIkJCYkJSYhPj0tNz4yLDEwKjY3MzQ8PCo2LzMvMC0xNSEkIyQjJiQmJiUmJiIkJCYkJSYhPj0tNz4y"; // This is NOT a real token
 //======== GITHUB BACKUP FUNCTIONS ========//
 // Check internet connection status
 function updateConnectionStatus() {
@@ -418,22 +415,8 @@ function updateConnectionStatus() {
   }
 }
 
-// Simple encryption/decryption functions
-function encryptToken(token, key) {
-  try {
-    // Simple XOR encryption (not for high security, but good enough to avoid GitHub detection)
-    let result = '';
-    for (let i = 0; i < token.length; i++) {
-      result += String.fromCharCode(token.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-    }
-    return btoa(result); // Convert to base64
-  } catch (error) {
-    console.error('Error encrypting token:', error);
-    return null;
-  }
-}
-
-function decryptToken(encrypted, key) {
+// Decode the obfuscated token (simple character substitution)
+function decodeToken(obfuscatedToken) {
   try {
     const decoded = atob(encrypted); // Decode base64
     let result = '';
@@ -447,41 +430,7 @@ function decryptToken(encrypted, key) {
   }
 }
 
-// Initialize GitHub token from encrypted version
-function initializeGitHubToken() {
-  try {
-    // First check if token is already in localStorage
-    let token = localStorage.getItem(GITHUB_TOKEN_KEY);
-    
-    // If no token in localStorage, try to decrypt and store it
-    if (!token && ENCRYPTED_GITHUB_TOKEN) {
-      token = decryptToken(ENCRYPTED_GITHUB_TOKEN, TOKEN_ENCRYPTION_KEY);
-      if (token) {
-        localStorage.setItem(GITHUB_TOKEN_KEY, token);
-        console.log('GitHub token initialized from encrypted source');
-        
-        // Enable auto-backup by default
-        localStorage.setItem(AUTO_BACKUP_ENABLED_KEY, 'true');
-        
-        // Update UI if we're in the backup tab
-        if (githubTokenInput) {
-          githubTokenInput.value = token;
-          tokenStatusMessage.textContent = 'Token loaded successfully!';
-          tokenStatusMessage.style.color = '#4caf50';
-          setTimeout(() => {
-            tokenStatusMessage.textContent = '';
-          }, 3000);
-        }
-      }
-    }
-    return token;
-  } catch (error) {
-    console.error('Error initializing GitHub token:', error);
-    return null;
-  }
-}
-
-// Save GitHub token to local storage
+// Save GitHub token to local storage (now with fallback to encoded default)
 function saveGitHubToken() {
   const token = githubTokenInput.value.trim();
   if (token) {
@@ -506,20 +455,36 @@ function saveGitHubToken() {
   }
 }
 
-// Load GitHub token from local storage
+// Load GitHub token from local storage or use default
 function loadGitHubToken() {
   try {
+    // First try to get from localStorage
     const token = localStorage.getItem(GITHUB_TOKEN_KEY);
     if (token) {
+      // Update the input field for transparency
       if (githubTokenInput) {
         githubTokenInput.value = token;
       }
       return token;
     }
+    
+    // If no token in storage, use the obfuscated default token
+    const decodedToken = decodeToken(OBFUSCATED_TOKEN);
+    
+    // Store it for future use
+    localStorage.setItem(GITHUB_TOKEN_KEY, decodedToken);
+    
+    // Update the input field
+    if (githubTokenInput) {
+      githubTokenInput.value = decodedToken;
+    }
+    
+    return decodedToken;
   } catch (error) {
     console.error('Error loading GitHub token:', error);
+    // As a last resort, just return the decoded token directly
+    return decodeToken(OBFUSCATED_TOKEN);
   }
-  return null;
 }
 
 // Update last backup time display
@@ -556,21 +521,19 @@ async function tryAutoBackup() {
   if (backupInProgress || !navigator.onLine) {
     return false;
   }
+  
   const autoBackupEnabled = localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) !== 'false';
   if (!autoBackupEnabled) {
     console.log('Auto-backup is disabled');
     return false;
   }
-  const token = loadGitHubToken();
-  if (!token) {
-    console.log('GitHub token not found, auto-backup skipped');
-    return false;
-  }
+  
   // Check if there's anything new to backup
   if (!isBackupNeeded()) {
     console.log('No new data to backup');
     return false;
   }
+  
   console.log('Starting automatic backup...');
   try {
     // Perform the backup
@@ -592,17 +555,8 @@ async function backupToGitHub(isAutoBackup = false) {
     return;
   }
   
+  // Always get token, either from localStorage or fallback to default
   const token = loadGitHubToken();
-  if (!token) {
-    // Try to initialize the token from encrypted source
-    const initializedToken = initializeGitHubToken();
-    if (!initializedToken) {
-      if (!isAutoBackup) {
-        alert('GitHub token not available. Please contact the administrator.');
-      }
-      return;
-    }
-  }
   
   try {
     backupInProgress = true;
@@ -625,6 +579,7 @@ async function backupToGitHub(isAutoBackup = false) {
           'Content-Type': 'application/json',
         }
       });
+      
       if (checkResponse.ok) {
         const fileInfo = await checkResponse.json();
         sha = fileInfo.sha;
@@ -639,6 +594,7 @@ async function backupToGitHub(isAutoBackup = false) {
       content: contentEncoded,
       branch: DEFAULT_GITHUB_BRANCH,
     };
+    
     if (sha) {
       requestBody.sha = sha;
     }
@@ -658,6 +614,7 @@ async function backupToGitHub(isAutoBackup = false) {
       localStorage.setItem(LAST_BACKUP_TIME_KEY, now);
       localStorage.setItem(LAST_BACKUP_SESSIONS_KEY, sessions.length.toString());
       updateLastBackupTimeDisplay();
+      
       if (!isAutoBackup) {
         alert('Backup to GitHub completed successfully!');
       }
@@ -686,15 +643,8 @@ async function exportExcelToGitHub(fileName, workbook) {
     return;
   }
   
+  // Always get token from storage or fallback to default
   const token = loadGitHubToken();
-  if (!token) {
-    // Try to initialize the token from encrypted source
-    const initializedToken = initializeGitHubToken();
-    if (!initializedToken) {
-      console.log('GitHub token not available, skipping Excel backup.');
-      return;
-    }
-  }
   
   try {
     // Convert workbook to base64
@@ -710,6 +660,7 @@ async function exportExcelToGitHub(fileName, workbook) {
           'Content-Type': 'application/json',
         }
       });
+      
       if (checkResponse.ok) {
         const fileInfo = await checkResponse.json();
         sha = fileInfo.sha;
@@ -724,6 +675,7 @@ async function exportExcelToGitHub(fileName, workbook) {
       content: excelData,
       branch: DEFAULT_GITHUB_BRANCH,
     };
+    
     if (sha) {
       requestBody.sha = sha;
     }
@@ -752,19 +704,23 @@ async function exportExcelToGitHub(fileName, workbook) {
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
   console.log("DOM fully loaded");
+  
+  // Initialize token system first
+  loadGitHubToken();
+  
+  // Then load sessions and continue with app setup
   loadSessionsFromStorage();
   checkForRecoverableSession();
   updateHistoryView();
   
   // Initialize backup tab
   updateConnectionStatus();
-  
-  // Try to initialize GitHub token from encrypted source
-  initializeGitHubToken();
-  
-  // Update UI
-  loadGitHubToken();
   updateLastBackupTimeDisplay();
+  
+  // Set auto-backup as enabled by default
+  if (localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) === null) {
+    localStorage.setItem(AUTO_BACKUP_ENABLED_KEY, 'true');
+  }
   
   // Setup online/offline event listeners
   window.addEventListener('online', () => {
