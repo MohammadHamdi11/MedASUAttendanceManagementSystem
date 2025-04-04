@@ -226,7 +226,7 @@ margin: 10% auto;
 <table id="resultTable" class="result-table" style="display: none;">
 <thead>
 <tr>
-<th>ID</th>
+<th>Student ID</th>
 <th>Content</th>
 <th>Time</th>
 </tr>
@@ -270,7 +270,7 @@ margin: 10% auto;
 <table class="result-table">
 <thead>
 <tr>
-<th>ID</th>
+<th>Student ID</th>
 <th>Content</th>
 <th>Time</th>
 </tr>
@@ -660,6 +660,53 @@ function scanQRCode() {
             
             // Process the scanned code
             processScannedCode(code.data);
+            
+            // Play success sound
+            playSuccessSound();
+          }
+        }
+      } catch (qrError) {
+        console.error("jsQR processing error:", qrError);
+        updateScanStatus('QR processing error: ' + qrError.message);
+      }
+    } catch (error) {
+      console.error("Error in scan process:", error);
+      updateScanStatus('Error in scan process: ' + error.message);
+    }
+  } else {
+    updateScanStatus('Waiting for camera...');
+  }
+  
+  // Continue scanning
+  requestAnimationFrame(scanQRCode);
+}
+
+// Process scanned QR code
+function processScannedCode(data) {
+  const now = new Date();
+  const scan = {
+    id: activeSession.scans.length + 1,
+    content: data,
+    time: now.toISOString(),
+    formattedTime: formatTime(now)
+  };
+  
+  activeSession.scans.push(scan);
+  
+  // Update UI
+  if (activeSession.scans.length === 1) {
+    noScansMessage.style.display = 'none';
+    resultTable.style.display = 'table';
+  }
+  
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td>${escapeHtml(scan.content)}</td>
+    <td>${scan.id}</td>
+    <td>${scan.formattedTime}</td>
+  `;
+  resultBody.appendChild(row);
+}
             
             // Play success sound
             playSuccessSound();
