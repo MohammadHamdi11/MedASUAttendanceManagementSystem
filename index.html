@@ -326,6 +326,7 @@ const sortBy = document.getElementById('sortBy');
 
 // Application State
 let activeSession = null;
+let sessions = [];
 let canvasElement = document.createElement('canvas');
 let canvas = canvasElement.getContext('2d');
 let scanning = false;
@@ -338,7 +339,6 @@ let autoSaveInterval = null;
 
 // Constants for auto-save functionality
 const AUTO_SAVE_DELAY = 3000; // 3 seconds
-const ACTIVE_SESSION_STORAGE_KEY = 'qrScannerActiveSession';
 const COMPLETED_SESSIONS_STORAGE_KEY = 'qrScannerSessions';
 
 // Check if jsQR is already loaded from the local file
@@ -465,8 +465,13 @@ confirmSessionBtn.addEventListener('click', () => {
         location: location,
         dateTime: now.toISOString(),
         formattedDateTime: formattedDateTime,
-        scans: []
+        scans: [],
+        endTime: null // Add endTime field
     };
+    
+    // Add to sessions array immediately
+    sessions.push(activeSession);
+    saveSessionsToStorage();
     
     // Update UI
     currentLocation.textContent = location;
@@ -731,6 +736,13 @@ function processScannedCode(data) {
     
     activeSession.scans.push(scan);
     
+    // Update sessions array and save
+    const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+    if (sessionIndex > -1) {
+        sessions[sessionIndex] = activeSession;
+        saveSessionsToStorage();
+    }
+    
     // Update UI
     if (activeSession.scans.length === 1) {
         noScansMessage.style.display = 'none';
@@ -761,6 +773,14 @@ function endSessionHandler() {
         if (videoStream) {
             videoStream.getTracks().forEach(track => track.stop());
             videoStream = null;
+        }
+
+        // Add endTime and update sessions array
+        activeSession.endTime = new Date().toISOString();
+        const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+        if (sessionIndex > -1) {
+            sessions[sessionIndex] = activeSession;
+            saveSessionsToStorage();
         }
         
         // Update UI
@@ -881,28 +901,16 @@ function clearActiveSession() {
 
 // Check if there's a recoverable session
 function checkForRecoverableSession() {
-    try {
-        const savedActiveSession = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
-        if (savedActiveSession) {
-            const parsedSession = JSON.parse(savedActiveSession);
-            if (parsedSession && parsedSession.id && parsedSession.scans && parsedSession.scans.length > 0) {
-                const result = confirm(`Found an incomplete scanning session at ${parsedSession.location} with ${parsedSession.scans.length} scans. Would you like to recover it?`);
-                
-                if (result) {
-                    // Recover the session
-                    recoverSession(parsedSession);
-                } else {
-                    // Clear the session
-                    clearActiveSession();
-                }
-            } else {
-                // Invalid session data, clear it
-                clearActiveSession();
-            }
+    const recoverableSession = sessions.find(s => !s.endTime);
+    if (recoverableSession) {
+        const result = confirm(`Recover incomplete session at ${recoverableSession.location} with ${recoverableSession.scans.length} scans?`);
+        if (result) {
+            recoverSession(recoverableSession);
+        } else {
+            // Mark as ended if user declines recovery
+            recoverableSession.endTime = new Date().toISOString();
+            saveSessionsToStorage();
         }
-    } catch (error) {
-        console.error("Error checking for recoverable session:", error);
-        clearActiveSession();
     }
 }
 
@@ -970,7 +978,7 @@ function loadSessionsFromStorage() {
         const savedSessions = localStorage.getItem(COMPLETED_SESSIONS_STORAGE_KEY);
         if (savedSessions) {
             sessions = JSON.parse(savedSessions);
-            console.log("Loaded", sessions.length, "completed sessions");
+            console.log("Loaded", sessions.length, "sessions");
         }
     } catch (error) {
         console.error("Error loading sessions:", error);
@@ -993,6 +1001,9 @@ function handleBeforeUnload(event) {
 
 // Update history view with sessions
 function updateHistoryView() {
+    // Filter out active sessions if desired, or display them with a status
+    const filteredSessions = sessions.filter(s => s.endTime); // Show only completed
+
     if (sessions.length === 0) {
         historyList.innerHTML = '<p class="no-results">No scanning sessions found.</p>';
         return;
