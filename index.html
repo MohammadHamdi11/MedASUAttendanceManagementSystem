@@ -457,12 +457,6 @@ confirmSessionBtn.addEventListener('click', () => {
     scans: []
   };
   
-  // Save the initial session to storage
-  saveActiveSessionToStorage();
-  
-  // Start auto-save interval
-  startAutoSave();
-  
   // Update UI
   currentLocation.textContent = location;
   currentDateTime.textContent = formattedDateTime;
@@ -699,9 +693,6 @@ function processScannedCode(data) {
   
   activeSession.scans.push(scan);
   
-  // Auto-save the session after each scan
-  saveActiveSessionToStorage();
-  
   // Update UI
   if (activeSession.scans.length === 1) {
     noScansMessage.style.display = 'none';
@@ -728,9 +719,6 @@ function endSessionHandler() {
   if (scanning) {
     scanning = false;
     
-    // Stop auto-save
-    stopAutoSave();
-    
     // Stop camera
     if (videoStream) {
       videoStream.getTracks().forEach(track => track.stop());
@@ -745,8 +733,7 @@ function endSessionHandler() {
     const scannerUI = document.querySelectorAll('.scanner-ui');
     scannerUI.forEach(el => el.remove());
     
-    // Move active session from storage to sessions history
-    clearActiveSessionFromStorage();
+    // Save session to history
     sessions.push(activeSession);
     saveSessionsToStorage();
     updateHistoryView();
@@ -763,43 +750,6 @@ function endSessionHandler() {
     // Show confirmation
     alert('Session completed and exported successfully!');
   }
-}
-
-// Start auto-save interval
-function startAutoSave() {
-  // Clear any existing interval first
-  stopAutoSave();
-  
-  // Set new interval
-  autoSaveInterval = setInterval(() => {
-    if (activeSession) {
-      saveActiveSessionToStorage();
-      console.log(`Auto-saved session with ${activeSession.scans.length} scans at ${new Date().toLocaleTimeString()}`);
-    }
-  }, AUTO_SAVE_DELAY);
-  
-  console.log("Auto-save started");
-}
-
-// Stop auto-save interval
-function stopAutoSave() {
-  if (autoSaveInterval) {
-    clearInterval(autoSaveInterval);
-    autoSaveInterval = null;
-    console.log("Auto-save stopped");
-  }
-}
-
-// Save active session to localStorage
-function saveActiveSessionToStorage() {
-  if (activeSession) {
-    localStorage.setItem('qrScannerActiveSession', JSON.stringify(activeSession));
-  }
-}
-
-// Clear active session from localStorage
-function clearActiveSessionFromStorage() {
-  localStorage.removeItem('qrScannerActiveSession');
 }
 
 // Handler for start session button
