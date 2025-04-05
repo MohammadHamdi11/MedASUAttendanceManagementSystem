@@ -1086,6 +1086,11 @@ document.querySelector('.scanner-container').appendChild(canvasElement);
 }
 // Add a log entry to the scan log
 function addScanLogEntry(message, type = 'info') {
+// Skip empty messages
+if (!message || message.trim() === '') {
+return;
+}
+
 const scanLog = document.getElementById('scan-log');
 if (scanLog) {
 const entry = document.createElement('div');
