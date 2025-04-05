@@ -295,31 +295,16 @@ margin: 10% auto;
 </div>
 <div id="backup" class="tab-content">
 <div class="card">
-<h2>Backup Settings</h2>
+<h2>Backup Controls</h2>
 <div class="backup-status">
 <p><strong>Connection Status:</strong> <span id="connectionStatus">Checking...</span></p>
 <p><strong>Last Backup:</strong> <span id="lastBackupTime">Never</span></p>
 </div>
 <div class="backup-controls">
-<h3>GitHub Authentication</h3>
-<p>Enter your GitHub personal access token with repository permissions:</p>
-<input type="password" id="githubTokenInput" placeholder="GitHub Personal Access Token">
-<button id="saveTokenBtn" class="button">Save Token</button>
-<p id="tokenStatusMessage"></p>
-<h3>Backup</h3>
-<button id="backupBtn" class="button">Backup to GitHub</button>
-<p><small>Note: When online, backups automatically occur at app startup and when sessions end.</small></p>
+<p><strong>Manually Backup</strong>
+<button id="backupBtn" class="button">Backup Now</button>
+<p><small>Note: When online, backups automatically occurs at app startup and when sessions end. If you need to manually backup the files, press the button above.</small></p>
 </div>
-</div>
-<div class="info-section">
-<h3>About Backup</h3>
-<p>This feature allows you to backup your QR scanning data to your GitHub repository:</p>
-<ul>
-<li>Repository: <code>MohammadHamdi11/QRScanner-webapp</code></li>
-<li>Path: <code>backups</code></li>
-<li>All sessions will be backed up as JSON and exported Excel files</li>
-<li>Requires internet connection and a valid GitHub token</li>
-</ul>
 </div>
 </div>
 </div>
