@@ -347,7 +347,6 @@ const saveTokenBtn = document.getElementById('saveTokenBtn');
 const tokenStatusMessage = document.getElementById('tokenStatusMessage');
 const autoBackupStatus = document.getElementById('autoBackupStatus');
 //======== APPLICATION STATE ========//
-let successAudio;
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
 let canvas = canvasElement.getContext('2d');
@@ -988,11 +987,9 @@ locationInput.focus();
 //======== CAMERA & SCANNER FUNCTIONS ========//
 // Improved camera initialization function
 async function startCamera() {
-    try {
-        // Create scanner UI elements
-        setupScannerUI();
-        // Initialize success sound
-        initSuccessSound();
+try {
+// Create scanner UI elements
+setupScannerUI();
 // Try to get camera access
 const constraints = {
 video: {
@@ -1737,109 +1734,61 @@ alert("Error exporting file: " + e.message);
 }
 }
 //======== HELPER FUNCTIONS ========//
-// Play success sound when QR code is detected
+// Add sound effect when QR code is successfully scanned
 function playSuccessSound() {
     try {
-        // Initialize if not already done
-        if (!successAudio) {
-            initSuccessSound();
-        }
-        
-        // Reset the audio to the beginning if it's already playing
-        successAudio.currentTime = 0;
-        
+        // Create an audio element for the success sound
+        const audio = new Audio('Barcode-scanner-beep-sound.mp3');
+        // Set volume (0.0 to 1.0)
+        audio.volume = 0.5;
         // Play the sound
-        const playPromise = successAudio.play();
-        
-        // Handle play() promise to avoid uncaught promise errors
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.warn("Audio play failed:", error);
-                // Many browsers require user interaction before playing audio
-                if (error.name === "NotAllowedError") {
-                    addScanLogEntry("Audio play blocked - requires user interaction", "warning");
-                }
-            });
-        }
+        audio.play().catch(error => {
+            // This catches errors like autoplay being blocked
+            console.warn("Could not play success sound:", error);
+        });
     } catch (error) {
         console.error("Error playing success sound:", error);
     }
 }
-// For now, we just have a placeholder to avoid errors
-}
+
 // Helper function to format date for display
 function formatDate(date) {
-return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())}`;
+    return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())}`;
 }
+
 // Helper function to format time for display
 function formatTime(date) {
-return `${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
+    return `${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
 }
+
 // Helper function to format date and time for display
 function formatDateTime(date) {
-return `${formatDate(date)} ${formatTime(date)}`;
+    return `${formatDate(date)} ${formatTime(date)}`;
 }
+
 // Helper function to format date and time for filenames
 function formatDateTimeForFile(date) {
-return `${date.getFullYear()}${padZero(date.getMonth() + 1)}${padZero(date.getDate())}_${padZero(date.getHours())}${padZero(date.getMinutes())}`;
+    return `${date.getFullYear()}${padZero(date.getMonth() + 1)}${padZero(date.getDate())}_${padZero(date.getHours())}${padZero(date.getMinutes())}`;
 }
+
 // Helper function to pad with leading zero
 function padZero(num) {
-return num.toString().padStart(2, '0');
+    return num.toString().padStart(2, '0');
 }
+
 // Helper function to escape HTML to prevent XSS
 function escapeHtml(text) {
-if (!text) return '';
-return text
-.toString()
-.replace(/&/g, "&amp;")
-.replace(/</g, "&lt;")
-.replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;")
-.replace(/'/g, "&#039;");
+    if (!text) return '';
+    return text
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
-// Initialize the success sound
-function initSuccessSound() {
-    // Create audio element if it doesn't exist
-    if (!successAudio) {
-        successAudio = new Audio('https://raw.githubusercontent.com/MohammadHamdi11/QRScanner-webapp/main/Barcode-scanner-beep-sound.mp3');
-        // Preload the audio for faster response
-        successAudio.preload = 'auto';
-    }
-}
-
-// Play success sound when QR code is detected
-function playSuccessSound() {
-    try {
-        // Initialize if not already done
-        if (!successAudio) {
-            initSuccessSound();
-        }
-        
-        // Reset the audio to the beginning if it's already playing
-        successAudio.currentTime = 0;
-        
-        // Play the sound
-        const playPromise = successAudio.play();
-        
-        // Handle play() promise to avoid uncaught promise errors
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.warn("Audio play failed:", error);
-                // Many browsers require user interaction before playing audio
-                if (error.name === "NotAllowedError") {
-                    addScanLogEntry("Audio play blocked - requires user interaction", "warning");
-                }
-            });
-        }
-    } catch (error) {
-        console.error("Error playing success sound:", error);
-    }
-}
-
 // Initialize button event handler
 startSessionBtn.addEventListener('click', startSessionBtnHandler);
-
 // When window loads, check if we need to request permissions
 window.addEventListener('load', () => {
 // We request camera permission only when the user starts a session
