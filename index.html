@@ -712,6 +712,14 @@ console.error(`GitHub API error: ${errorData.message}`);
 console.error('GitHub Excel export error:', error);
 }
 }
+// Format date as dd/mm/yyyy
+function formatDate(date) {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  
+  return `${day}/${month}/${year}`;
+}
 //======== INITIALIZATION ========//
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
