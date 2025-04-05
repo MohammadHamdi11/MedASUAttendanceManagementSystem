@@ -467,20 +467,59 @@ console.error('Error loading last backup time:', error);
 lastBackupTime.textContent = 'Error';
 }
 }
-// Convert data to JSON
+// Convert data to Excel workbook
 function prepareDataForBackup() {
-return JSON.stringify(sessions, null, 2);
+// Create a new workbook
+const workbook = XLSX.utils.book_new();
+// Counter for unique sheet names
+let sheetCounter = {};
+// For each session, create a separate sheet with proper format
+sessions.forEach(session => {
+const data = [
+['Number', 'Student ID', 'Location', 'Date', 'Time']
+];
+// Add each scan in the proper format
+session.scans.forEach(scan => {
+const scanDate = new Date(scan.time);
+data.push([
+scan.id,                // Row number
+scan.content,           // QR code content (Student ID)
+session.location,       // Location
+formatDate(scanDate),   // Date
+formatTime(scanDate)    // Time
+]);
+});
+// Only create sheet if session has scans
+if (data.length > 1) {
+const ws = XLSX.utils.aoa_to_sheet(data);
+// Create unique sheet name based on location
+let baseSheetName = session.location.substring(0, 25).replace(/[^a-z0-9]/gi, '_');
+if (baseSheetName.length === 0) baseSheetName = "Session";
+// Ensure uniqueness
+if (sheetCounter[baseSheetName]) {
+sheetCounter[baseSheetName]++;
+baseSheetName = baseSheetName + "_" + sheetCounter[baseSheetName];
+} else {
+sheetCounter[baseSheetName] = 1;
+}
+// Excel sheet names cannot exceed 31 characters
+const sheetName = baseSheetName.substring(0, 31);
+try {
+XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+} catch (e) {
+console.error("Error adding sheet:", e);
+// If there's an error with this sheet, try with a generic name
+XLSX.utils.book_append_sheet(workbook, ws, "Session_" + Math.random().toString(36).substring(2, 7));
+}
+}
+});
+return workbook;
 }
 // Check if backup is needed
 function isBackupNeeded() {
-    // Always consider backup needed when called directly after session end
-    if (activeSession && !activeSession.inProgress) {
-        return true;
-    }
-    
-    // Check if we have more sessions than last time we backed up
-    const savedLastBackupSessions = parseInt(localStorage.getItem(LAST_BACKUP_SESSIONS_KEY) || '0');
-    return sessions.length > savedLastBackupSessions;
+// Check if we have more sessions than last time we backed up
+const savedLastBackupSessions = parseInt(localStorage.getItem(LAST_BACKUP_SESSIONS_KEY) || '0');
+return sessions.length > savedLastBackupSessions;
 }
 // Try to automatically backup data if conditions are met
 async function tryAutoBackup() {
@@ -506,8 +545,12 @@ return false;
 }
 console.log('Starting automatic backup...');
 try {
+// Create Excel workbook
+const workbook = prepareDataForBackup();
+// Create filename with date
+const fileName = `qr_scanner_backup_${formatDateTimeForFile(new Date())}.xlsx`;
 // Perform the backup
-await backupToGitHub(true);
+await backupToGitHub(true, fileName, workbook);
 console.log('Auto-backup completed successfully');
 return true;
 } catch (error) {
@@ -516,7 +559,7 @@ return false;
 }
 }
 // Backup to GitHub
-async function backupToGitHub(isAutoBackup = false) {
+async function backupToGitHub(isAutoBackup = false, customFileName = null, workbook = null) {
 if (!navigator.onLine) {
 if (!isAutoBackup) {
 alert('Cannot backup: You are offline.');
@@ -537,9 +580,14 @@ if (!isAutoBackup && backupBtn) {
 backupBtn.disabled = true;
 backupBtn.textContent = 'Backing up...';
 }
-const fileName = `qr_scanner_backup_${formatDateTimeForFile(new Date())}.json`;
-const content = prepareDataForBackup();
-const contentEncoded = btoa(unescape(encodeURIComponent(content)));
+// Create filename with date if not provided
+const fileName = customFileName || `qr_scanner_backup_${formatDateTimeForFile(new Date())}.xlsx`;
+// Create workbook if not provided
+if (!workbook) {
+workbook = prepareDataForBackup();
+}
+// Convert workbook to base64
+const excelData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
 // First, try to get the SHA of the file if it exists
 let sha = null;
 try {
@@ -560,7 +608,7 @@ console.log('File does not exist yet, creating new file.');
 // Now create or update the file
 const requestBody = {
 message: `Backup QR Scanner data - ${new Date().toLocaleString()}`,
-content: contentEncoded,
+content: excelData,
 branch: DEFAULT_GITHUB_BRANCH,
 };
 if (sha) {
@@ -651,7 +699,11 @@ body: JSON.stringify(requestBody)
 });
 if (response.ok) {
 console.log('Excel file uploaded to GitHub successfully');
-// Don't update last backup time as this is separate from the main backup
+// Update last backup time and session count as this is now our main backup format
+const now = new Date().toISOString();
+localStorage.setItem(LAST_BACKUP_TIME_KEY, now);
+localStorage.setItem(LAST_BACKUP_SESSIONS_KEY, sessions.length.toString());
+updateLastBackupTimeDisplay();
 } else {
 const errorData = await response.json();
 console.error(`GitHub API error: ${errorData.message}`);
@@ -869,47 +921,41 @@ autoSaveInterval = null;
 }
 // End session handler
 function endSessionHandler() {
-    if (!activeSession) return;
-    
-    // Confirm if there are no scans
-    if (activeSession.scans.length === 0) {
-        if (!confirm("No scans detected in this session. Do you still want to end it?")) {
-            return;
-        }
-    }
-    
-    // Stop scanner and auto-save
-    stopScanner();
-    stopAutoSave();
-    
-    // Mark session as completed
-    activeSession.inProgress = false;
-    
-    // Save sessions to storage before clearing active session
-    saveSessionsToStorage();
-    
-    // Clear active session storage since it's complete
-    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
-    localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
-    
-    // Update UI
-    sessionInfo.style.display = 'none';
-    startSessionBtn.textContent = 'Start New Session';
-    startSessionBtn.removeEventListener('click', endSessionHandler);
-    startSessionBtn.addEventListener('click', startSessionBtnHandler);
-    
-    // Update history view
-    updateHistoryView();
-    
-    // Trigger backup immediately when session ends (don't check auto-backup setting)
-    if (navigator.onLine) {
-        backupToGitHub(true)
-            .then(() => console.log("Session end backup completed successfully"))
-            .catch(error => console.error("Session end backup failed:", error));
-    }
-    
-    // Set active session to null after everything else is done
-    activeSession = null;
+if (!activeSession) return;
+// Confirm if there are no scans
+if (activeSession.scans.length === 0) {
+if (!confirm("No scans detected in this session. Do you still want to end it?")) {
+return;
+}
+}
+// Stop scanner and auto-save
+stopScanner();
+stopAutoSave();
+// Mark session as completed
+activeSession.inProgress = false;
+// Save sessions to storage before clearing active session
+saveSessionsToStorage();
+// Clear active session storage since it's complete
+localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+// Update UI
+sessionInfo.style.display = 'none';
+startSessionBtn.textContent = 'Start New Session';
+startSessionBtn.removeEventListener('click', endSessionHandler);
+startSessionBtn.addEventListener('click', startSessionBtnHandler);
+// Update history view
+updateHistoryView();
+// If online, trigger backup immediately instead of checking auto-backup setting
+if (navigator.onLine) {
+console.log("Performing backup after session end");
+backupToGitHub(true).then(() => {
+console.log("Session end backup completed");
+}).catch(error => {
+console.error("Session end backup failed:", error);
+});
+}
+// Set active session to null after everything else is done
+activeSession = null;
 }
 // Start session button handler
 function startSessionBtnHandler() {
@@ -1589,7 +1635,7 @@ return;
 const fileName = `${session.location.replace(/[^a-z0-9]/gi, '_')}_${formatDateTimeForFile(new Date(session.dateTime))}.xlsx`;
 // Prepare data 
 const data = [
-['Number', 'Student ID', 'Location', 'Date', 'Time']
+['Number', 'Student ID', 'Location', 'Log Date', 'Log Time']
 ];
 session.scans.forEach(scan => {
 const scanDate = new Date(scan.time);
@@ -1627,7 +1673,7 @@ let sheetCounter = {};
 // For each session
 sessions.forEach(session => {
 const data = [
-['Number', 'Student ID', 'Location', 'Date', 'Time']
+['Number', 'Student ID', 'Location', 'Log Date', 'Log Time']
 ];
 session.scans.forEach(scan => {
 const scanDate = new Date(scan.time);
