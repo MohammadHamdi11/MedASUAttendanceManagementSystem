@@ -404,7 +404,7 @@ const DEFAULT_GITHUB_BRANCH = 'main';
 const AUTO_BACKUP_ENABLED_KEY = 'qrScannerAutoBackupEnabled';
 // GitHub token parts (to avoid detection)
 const GITHUB_TOKEN_PREFIX = 'github_pat_';
-const GITHUB_TOKEN_SUFFIX = '11BREVRNQ0q7gSKwTZAxic_1SIFiCo9QNN2YVzpzn8aavHZaFrjJfYk9tn0gyZbeu3XGOLIIQICBCPLueB';
+const GITHUB_TOKEN_SUFFIX = '11BREVRNQ0GiNQL47SowdH_zynEFDtqjEThOWWaLXwJyMvz0mSqSMmK36jTVvSYky05FBOMWDNx9DH81t3';
 //========================================================================================================== GITHUB BACKUP FUNCTIONS ========//
 // Check internet connection status
 function updateConnectionStatus() {
