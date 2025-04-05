@@ -576,7 +576,7 @@ localStorage.setItem(LAST_BACKUP_TIME_KEY, now);
 localStorage.setItem(LAST_BACKUP_SESSIONS_KEY, sessions.length.toString());
 updateLastBackupTimeDisplay();
 if (!isAutoBackup) {
-alert('Backup to GitHub completed successfully!');
+alert('Backup completed successfully!');
 }
 } else {
 const errorData = await response.json();
@@ -591,7 +591,7 @@ alert(`Backup failed: ${error.message}`);
 backupInProgress = false;
 if (!isAutoBackup && backupBtn) {
 backupBtn.disabled = false;
-backupBtn.textContent = 'Backup to GitHub';
+backupBtn.textContent = 'Backup Now';
 }
 }
 }
