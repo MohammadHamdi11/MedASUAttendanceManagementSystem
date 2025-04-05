@@ -1,0 +1,47 @@
+[
+  {
+    "id": "session_1743825703023",
+    "location": "Kshdhdj",
+    "dateTime": "2025-04-05T04:01:43.023Z",
+    "formattedDateTime": "2025-04-05 06:01:43",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-05T04:01:58.565Z",
+        "formattedTime": "06:01:58"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743826267941",
+    "location": "Lolodm",
+    "dateTime": "2025-04-05T04:11:07.941Z",
+    "formattedDateTime": "2025-04-05 06:11:07",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-05T04:11:12.414Z",
+        "formattedTime": "06:11:12"
+      }
+    ],
+    "inProgress": false
+  },
+  {
+    "id": "session_1743826651400",
+    "location": "Idjfhf",
+    "dateTime": "2025-04-05T04:17:31.400Z",
+    "formattedDateTime": "2025-04-05 06:17:31",
+    "scans": [
+      {
+        "id": 1,
+        "content": "231249",
+        "time": "2025-04-05T04:17:34.908Z",
+        "formattedTime": "06:17:34"
+      }
+    ],
+    "inProgress": false
+  }
+]
