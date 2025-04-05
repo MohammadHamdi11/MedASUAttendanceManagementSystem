@@ -347,6 +347,7 @@ const saveTokenBtn = document.getElementById('saveTokenBtn');
 const tokenStatusMessage = document.getElementById('tokenStatusMessage');
 const autoBackupStatus = document.getElementById('autoBackupStatus');
 //======== APPLICATION STATE ========//
+let successAudio;
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
 let canvas = canvasElement.getContext('2d');
@@ -454,32 +455,28 @@ return GITHUB_TOKEN_PREFIX + GITHUB_TOKEN_SUFFIX;
 }
 // Update last backup time display
 function updateLastBackupTimeDisplay() {
-  try {
-    const lastBackup = localStorage.getItem(LAST_BACKUP_TIME_KEY);
-    if (lastBackup) {
-      const backupDate = new Date(lastBackup);
-      
-      // Format date as dd/mm/yyyy
-      const day = String(backupDate.getDate()).padStart(2, '0');
-      const month = String(backupDate.getMonth() + 1).padStart(2, '0');
-      const year = backupDate.getFullYear();
-      
-      // Format time
-      const hours = String(backupDate.getHours()).padStart(2, '0');
-      const minutes = String(backupDate.getMinutes()).padStart(2, '0');
-      const seconds = String(backupDate.getSeconds()).padStart(2, '0');
-      
-      // Combine into dd/mm/yyyy HH:MM:SS format
-      const formattedTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-      
-      lastBackupTime.textContent = formattedTime;
-    } else {
-      lastBackupTime.textContent = 'Never';
-    }
-  } catch (error) {
-    console.error('Error loading last backup time:', error);
-    lastBackupTime.textContent = 'Error';
-  }
+try {
+const lastBackup = localStorage.getItem(LAST_BACKUP_TIME_KEY);
+if (lastBackup) {
+const backupDate = new Date(lastBackup);
+// Format date as dd/mm/yyyy
+const day = String(backupDate.getDate()).padStart(2, '0');
+const month = String(backupDate.getMonth() + 1).padStart(2, '0');
+const year = backupDate.getFullYear();
+// Format time
+const hours = String(backupDate.getHours()).padStart(2, '0');
+const minutes = String(backupDate.getMinutes()).padStart(2, '0');
+const seconds = String(backupDate.getSeconds()).padStart(2, '0');
+// Combine into dd/mm/yyyy HH:MM:SS format
+const formattedTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+lastBackupTime.textContent = formattedTime;
+} else {
+lastBackupTime.textContent = 'Never';
+}
+} catch (error) {
+console.error('Error loading last backup time:', error);
+lastBackupTime.textContent = 'Error';
+}
 }
 // Convert data to Excel workbook
 function prepareDataForBackup() {
@@ -991,9 +988,11 @@ locationInput.focus();
 //======== CAMERA & SCANNER FUNCTIONS ========//
 // Improved camera initialization function
 async function startCamera() {
-try {
-// Create scanner UI elements
-setupScannerUI();
+    try {
+        // Create scanner UI elements
+        setupScannerUI();
+        // Initialize success sound
+        initSuccessSound();
 // Try to get camera access
 const constraints = {
 video: {
@@ -1104,7 +1103,6 @@ function addScanLogEntry(message, type = 'info') {
 if (!message || message.trim() === '') {
 return;
 }
-
 const scanLog = document.getElementById('scan-log');
 if (scanLog) {
 const entry = document.createElement('div');
@@ -1739,9 +1737,34 @@ alert("Error exporting file: " + e.message);
 }
 }
 //======== HELPER FUNCTIONS ========//
-// Add placeholder for success sound function
+// Play success sound when QR code is detected
 function playSuccessSound() {
-// Sound functionality could be added here
+    try {
+        // Initialize if not already done
+        if (!successAudio) {
+            initSuccessSound();
+        }
+        
+        // Reset the audio to the beginning if it's already playing
+        successAudio.currentTime = 0;
+        
+        // Play the sound
+        const playPromise = successAudio.play();
+        
+        // Handle play() promise to avoid uncaught promise errors
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.warn("Audio play failed:", error);
+                // Many browsers require user interaction before playing audio
+                if (error.name === "NotAllowedError") {
+                    addScanLogEntry("Audio play blocked - requires user interaction", "warning");
+                }
+            });
+        }
+    } catch (error) {
+        console.error("Error playing success sound:", error);
+    }
+}
 // For now, we just have a placeholder to avoid errors
 }
 // Helper function to format date for display
@@ -1775,8 +1798,48 @@ return text
 .replace(/"/g, "&quot;")
 .replace(/'/g, "&#039;");
 }
+// Initialize the success sound
+function initSuccessSound() {
+    // Create audio element if it doesn't exist
+    if (!successAudio) {
+        successAudio = new Audio('https://raw.githubusercontent.com/MohammadHamdi11/QRScanner-webapp/main/Barcode-scanner-beep-sound.mp3');
+        // Preload the audio for faster response
+        successAudio.preload = 'auto';
+    }
+}
+
+// Play success sound when QR code is detected
+function playSuccessSound() {
+    try {
+        // Initialize if not already done
+        if (!successAudio) {
+            initSuccessSound();
+        }
+        
+        // Reset the audio to the beginning if it's already playing
+        successAudio.currentTime = 0;
+        
+        // Play the sound
+        const playPromise = successAudio.play();
+        
+        // Handle play() promise to avoid uncaught promise errors
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.warn("Audio play failed:", error);
+                // Many browsers require user interaction before playing audio
+                if (error.name === "NotAllowedError") {
+                    addScanLogEntry("Audio play blocked - requires user interaction", "warning");
+                }
+            });
+        }
+    } catch (error) {
+        console.error("Error playing success sound:", error);
+    }
+}
+
 // Initialize button event handler
 startSessionBtn.addEventListener('click', startSessionBtnHandler);
+
 // When window loads, check if we need to request permissions
 window.addEventListener('load', () => {
 // We request camera permission only when the user starts a session
