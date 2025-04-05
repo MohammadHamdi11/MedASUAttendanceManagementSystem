@@ -1086,6 +1086,11 @@ document.querySelector('.scanner-container').appendChild(canvasElement);
 }
 // Add a log entry to the scan log
 function addScanLogEntry(message, type = 'info') {
+// Skip empty messages
+if (!message || message.trim() === '') {
+return;
+}
+
 const scanLog = document.getElementById('scan-log');
 if (scanLog) {
 const entry = document.createElement('div');
@@ -1122,8 +1127,6 @@ setTimeout(() => {
 frame.style.borderColor = '#24325f';
 }, 500);
 }
-// Add success log entry
-addScanLogEntry('QR code successfully detected', 'success');
 }
 // Update scan status message
 function updateScanStatus(message) {
@@ -1136,7 +1139,7 @@ statusEl.style.backgroundColor = 'rgba(0, 128, 0, 0.8)';  // Green background fo
 // Briefly show success then reset
 setTimeout(() => {
 statusEl.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-}, 2000);
+}, 5000);
 } else if (message.includes('Error') || message.includes('failed')) {
 statusEl.style.backgroundColor = 'rgba(220, 0, 0, 0.8)';  // Red background for errors
 } else if (message.includes('Duplicate')) {
