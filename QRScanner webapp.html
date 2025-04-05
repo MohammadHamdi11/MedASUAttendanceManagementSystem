@@ -457,7 +457,17 @@ function updateLastBackupTimeDisplay() {
 try {
 const lastBackup = localStorage.getItem(LAST_BACKUP_TIME_KEY);
 if (lastBackup) {
-const formattedTime = new Date(lastBackup).toLocaleString();
+const backupDate = new Date(lastBackup);
+// Format date as dd/mm/yyyy
+const day = String(backupDate.getDate()).padStart(2, '0');
+const month = String(backupDate.getMonth() + 1).padStart(2, '0');
+const year = backupDate.getFullYear();
+// Format time
+const hours = String(backupDate.getHours()).padStart(2, '0');
+const minutes = String(backupDate.getMinutes()).padStart(2, '0');
+const seconds = String(backupDate.getSeconds()).padStart(2, '0');
+// Combine into dd/mm/yyyy HH:MM:SS format
+const formattedTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 lastBackupTime.textContent = formattedTime;
 } else {
 lastBackupTime.textContent = 'Never';
@@ -1090,7 +1100,6 @@ function addScanLogEntry(message, type = 'info') {
 if (!message || message.trim() === '') {
 return;
 }
-
 const scanLog = document.getElementById('scan-log');
 if (scanLog) {
 const entry = document.createElement('div');
