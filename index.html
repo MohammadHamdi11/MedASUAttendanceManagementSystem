@@ -1122,6 +1122,9 @@ setTimeout(() => {
 frame.style.borderColor = '#24325f';
 }, 500);
 }
+// Add success log entry
+addScanLogEntry('QR code successfully detected', 'success');
+}
 // Update scan status message
 function updateScanStatus(message) {
 const statusEl = document.getElementById('scan-status');
