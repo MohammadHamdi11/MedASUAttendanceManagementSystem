@@ -209,7 +209,10 @@ margin: 10% auto;
 <div class="card">
 <h2>QR Code Scanner</h2>
 <div class="flex-between">
+<div class="button-group">
 <button id="startSessionBtn" class="button">Start Scanning Session</button>
+<button id="addManualEntryBtn" class="button button-secondary" style="display: none;">Add Manual Entry</button>
+</div>
 <div id="sessionInfo" style="display: none;">
 <p><strong>Location:</strong> <span id="currentLocation">-</span></p>
 <p><strong>Started:</strong> <span id="currentDateTime">-</span></p>
@@ -281,6 +284,28 @@ margin: 10% auto;
 </div>
 </div>
 </div>
+<div id="backup" class="tab-content">
+<div class="card">
+<h2>Backup Controls</h2>
+<div class="backup-status">
+<p><strong>Connection Status:</strong> <span id="connectionStatus">Checking...</span></p>
+<p><strong>Last Backup:</strong> <span id="lastBackupTime">Never</span></p>
+</div>
+<div class="backup-controls">
+<button id="backupBtn" class="button">Backup Now</button>
+<p><small>Note: When online, backups automatically occur at app startup and when sessions end. If you need to manually backup the files, press the button above.</small></p>
+</div>
+</div>
+</div>
+</div>
+<div id="manualEntryModal" class="modal">
+  <div class="modal-content">
+    <span class="close" id="closeManualEntryBtn">&times;</span>
+    <h2>Enter Student ID Manually</h2>
+    <p>Please enter the student ID:</p>
+    <input type="text" id="manualIdInput" placeholder="e.g., S12345678">
+    <button id="confirmManualEntryBtn" class="button">Add Entry</button>
+  </div>
 </div>
 <!-- Modal for Starting Session -->
 <div id="sessionModal" class="modal">
@@ -312,7 +337,7 @@ margin: 10% auto;
 <!-- Script for Excel Export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-//======== DOM ELEMENTS ========//
+//========================================================================================================== DOM ELEMENTS ========//
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 const startSessionBtn = document.getElementById('startSessionBtn');
@@ -338,7 +363,6 @@ const detailsBody = document.getElementById('detailsBody');
 const exportSessionBtn = document.getElementById('exportSessionBtn');
 const closeDetailsBtn = document.getElementById('closeDetailsBtn');
 const sortBy = document.getElementById('sortBy');
-// Backup tab elements
 const backupBtn = document.getElementById('backupBtn');
 const lastBackupTime = document.getElementById('lastBackupTime');
 const connectionStatus = document.getElementById('connectionStatus');
@@ -346,7 +370,10 @@ const githubTokenInput = document.getElementById('githubTokenInput');
 const saveTokenBtn = document.getElementById('saveTokenBtn');
 const tokenStatusMessage = document.getElementById('tokenStatusMessage');
 const autoBackupStatus = document.getElementById('autoBackupStatus');
-//======== APPLICATION STATE ========//
+const manualEntryModal = document.getElementById('manualEntryModal');
+const closeManualEntryBtn = document.getElementById('closeManualEntryBtn');
+const manualIdInput = document.getElementById('manualIdInput');
+const confirmManualEntryBtn = document.getElementById('confirmManualEntryBtn');//========================================================================================================== APPLICATION STATE ========//
 let successSound = null;
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
@@ -377,7 +404,7 @@ const AUTO_BACKUP_ENABLED_KEY = 'qrScannerAutoBackupEnabled';
 // GitHub token parts (to avoid detection)
 const GITHUB_TOKEN_PREFIX = 'github_pat_';
 const GITHUB_TOKEN_SUFFIX = '11BREVRNQ0q7gSKwTZAxic_1SIFiCo9QNN2YVzpzn8aavHZaFrjJfYk9tn0gyZbeu3XGOLIIQICBCPLueB';
-//======== GITHUB BACKUP FUNCTIONS ========//
+//========================================================================================================== GITHUB BACKUP FUNCTIONS ========//
 // Check internet connection status
 function updateConnectionStatus() {
 if (navigator.onLine) {
@@ -723,7 +750,7 @@ console.error(`GitHub API error: ${errorData.message}`);
 console.error('GitHub Excel export error:', error);
 }
 }
-//======== INITIALIZATION ========//
+//========================================================================================================== INITIALIZATION ========//
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
 preloadSuccessSound();
@@ -735,6 +762,8 @@ updateHistoryView();
 updateConnectionStatus();
 loadGitHubToken();
 updateLastBackupTimeDisplay();
+// Setup manual entry functionality
+setupManualEntryButton();
 // Enable auto-backup by default
 if (localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) === null) {
 localStorage.setItem(AUTO_BACKUP_ENABLED_KEY, 'true');
@@ -775,6 +804,7 @@ console.log("Initial auto-backup completed");
 // Add beforeunload event listener to prevent accidental closing during active session
 window.addEventListener('beforeunload', handleBeforeUnload);
 });
+//========================================================
 // Load jsQR from local file
 function loadJsQR() {
 return new Promise((resolve, reject) => {
@@ -801,7 +831,7 @@ reject(error);
 document.head.appendChild(script);
 });
 }
-//======== SERVICE WORKER REGISTRATION FOR PWA ========//
+//========================================================================================================== SERVICE WORKER REGISTRATION FOR PWA ========//
 if ('serviceWorker' in navigator) {
 window.addEventListener('load', () => {
 navigator.serviceWorker.register('./sw.js')
@@ -813,7 +843,103 @@ console.log('ServiceWorker registration failed: ', err);
 });
 });
 }
-//======== UI NAVIGATION & EVENT HANDLERS ========//
+//========================================================================================================== MANUAL ENTRY FUNCTIONS ========//
+// Setup manual entry button
+function setupManualEntryButton() {
+// Get the button element
+const addManualEntryBtn = document.getElementById('addManualEntryBtn');
+// Add click event listener
+addManualEntryBtn.addEventListener('click', () => {
+// Show the manual entry modal
+manualEntryModal.style.display = 'block';
+// Focus on the input field
+manualIdInput.focus();
+// Clear previous inputs
+manualIdInput.value = '';
+manualInfoInput.value = '';
+});
+// Add close button event listener
+if (closeManualEntryBtn) {
+closeManualEntryBtn.addEventListener('click', () => {
+manualEntryModal.style.display = 'none';
+});
+}
+// Add confirm button event listener
+if (confirmManualEntryBtn) {
+confirmManualEntryBtn.addEventListener('click', processManualEntry);
+}
+// Also allow pressing Enter to confirm
+manualIdInput.addEventListener('keyup', (event) => {
+if (event.key === 'Enter') {
+processManualEntry();
+}
+});
+}
+// Process manual entry
+function processManualEntry() {
+  const studentId = manualIdInput.value.trim();
+  
+  if (!studentId) {
+    alert('Please enter a Student ID');
+    return;
+  }
+
+  // Use studentId directly without additional info
+  processScannedCode(studentId, true);
+  
+  manualEntryModal.style.display = 'none';
+  updateScanStatus(`✅ Manual entry added: ${studentId.substring(0, 20)}${studentId.length > 20 ? '...' : ''}`);
+  addScanLogEntry(`Manual entry: ${studentId.substring(0, 15)}${studentId.length > 15 ? '...' : ''}`, 'success');
+}
+// Process scanned QR code (modified to handle manual entries)
+function processScannedCode(data, isManual = false) {
+// Additional validation to ensure we're not adding empty codes
+if (!data || data.trim() === '') {
+console.error("Attempted to process empty QR code data");
+updateScanStatus('Error: Empty QR code data');
+addScanLogEntry('Empty QR code data - not saved', 'error');
+return;
+}
+const now = new Date();
+const scan = {
+id: activeSession.scans.length + 1,
+content: data,
+time: now.toISOString(),
+formattedTime: formatTime(now),
+isManual: isManual  // Flag to indicate if this was a manual entry
+};
+// Add to active session
+activeSession.scans.push(scan);
+// Update UI
+if (activeSession.scans.length === 1) {
+noScansMessage.style.display = 'none';
+resultTable.style.display = 'table';
+}
+const row = document.createElement('tr');
+// Add a class to the row if it's a manual entry
+if (isManual) {
+row.className = 'manual-entry';
+}
+row.innerHTML = `
+<td>${scan.id}</td>
+<td>${escapeHtml(scan.content)}${isManual ? ' <span class="badge">Manual</span>' : ''}</td>
+<td>${scan.formattedTime}</td>
+`;
+resultBody.appendChild(row);
+// Find the session in the sessions array and update it
+const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+if (sessionIndex !== -1) {
+sessions[sessionIndex] = {...activeSession};
+}
+// Save both active session and completed sessions
+saveActiveSession();
+saveSessionsToStorage();
+// For manual entries, we don't need to play sound
+if (!isManual) {
+playSuccessSound();
+}
+}
+//========================================================================================================== UI NAVIGATION & EVENT HANDLERS ========//
 tabs.forEach(tab => {
 tab.addEventListener('click', () => {
 const tabId = tab.getAttribute('data-tab');
@@ -886,6 +1012,8 @@ localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
 currentLocation.textContent = location;
 currentDateTime.textContent = formattedDateTime;
 sessionInfo.style.display = 'block';
+// Show the manual entry button
+document.getElementById('addManualEntryBtn').style.display = 'inline-block';
 // Start camera
 startCamera();
 // Clear previous results
@@ -905,7 +1033,7 @@ startSessionBtn.addEventListener('click', endSessionHandler);
 // Update history view to show the new session
 updateHistoryView();
 });
-//======== SESSION MANAGEMENT ========//
+//========================================================================================================== SESSION MANAGEMENT ========//
 // Start auto-save interval
 function startAutoSave() {
 // Clear any existing interval
@@ -955,6 +1083,8 @@ sessionInfo.style.display = 'none';
 startSessionBtn.textContent = 'Start New Session';
 startSessionBtn.removeEventListener('click', endSessionHandler);
 startSessionBtn.addEventListener('click', startSessionBtnHandler);
+// Hide manual entry button
+document.getElementById('addManualEntryBtn').style.display = 'none';
 // Update history view
 updateHistoryView();
 // If online, trigger backup immediately instead of checking auto-backup setting
@@ -986,7 +1116,7 @@ sessionModal.style.display = 'block';
 locationInput.focus();
 }
 }
-//======== CAMERA & SCANNER FUNCTIONS ========//
+//========================================================================================================== CAMERA & SCANNER FUNCTIONS ========//
 // Improved camera initialization function
 async function startCamera() {
 try {
@@ -1234,7 +1364,7 @@ updateScanStatus('Waiting for camera...');
 // Continue scanning
 requestAnimationFrame(scanQRCode);
 }
-//======== QR DATA PROCESSING ========//
+//========================================================================================================== QR DATA PROCESSING ========//
 // Process scanned QR code 
 function processScannedCode(data) {
 // Additional validation to ensure we're not adding empty codes
@@ -1373,7 +1503,7 @@ exportSession(session);
 closeDetailsBtn.addEventListener('click', () => {
 sessionDetails.style.display = 'none';
 });
-//======== SESSION STORAGE & RECOVERY ========//
+//========================================================================================================== SESSION STORAGE & RECOVERY ========//
 // Save active session to local storage
 function saveActiveSession() {
 if (activeSession) {
@@ -1542,7 +1672,7 @@ event.returnValue = message;
 return message;
 }
 }
-//======== HISTORY & DISPLAY FUNCTIONS ========//
+//========================================================================================================== HISTORY & DISPLAY FUNCTIONS ========//
 // Update history view with sessions
 function updateHistoryView() {
 if (sessions.length === 0) {
@@ -1638,7 +1768,7 @@ detailsBody.appendChild(row);
 });
 sessionDetails.style.display = 'block';
 }
-//======== EXPORT FUNCTIONS ========//
+//========================================================================================================== EXPORT FUNCTIONS ========//
 // Export single session to Excel
 function exportSession(session) {
 if (!window.XLSX) {
@@ -1735,7 +1865,7 @@ console.error("Error writing file:", e);
 alert("Error exporting file: " + e.message);
 }
 }
-//======== HELPER FUNCTIONS ========//
+//========================================================================================================== HELPER FUNCTIONS ========//
 // Add sound effect when QR code is successfully scanned
 // Preload the success sound file
 function preloadSuccessSound() {
