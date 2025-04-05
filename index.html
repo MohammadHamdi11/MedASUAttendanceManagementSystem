@@ -1033,11 +1033,8 @@ sessionInfo.style.display = 'block';
 // Start camera
 startCamera();
 // Clear previous results
-// Clear result table and reset UI completely
 resultBody.innerHTML = '';
 resultTable.style.display = 'none';
-document.getElementById('scan-log').innerHTML = '<div style="text-align: center; font-weight: bold; margin-bottom: 5px;">Scan Log</div>';
-document.querySelector('.scanner-container').innerHTML = '<div id="scanner-placeholder" class="scanner-placeholder">Camera inactive</div><video id="video" style="display: none;"></video>';
 noScansMessage.style.display = 'block';
 // Start auto-save interval
 startAutoSave();
