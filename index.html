@@ -473,9 +473,14 @@ return JSON.stringify(sessions, null, 2);
 }
 // Check if backup is needed
 function isBackupNeeded() {
-// Check if we have more sessions than last time we backed up
-const savedLastBackupSessions = parseInt(localStorage.getItem(LAST_BACKUP_SESSIONS_KEY) || '0');
-return sessions.length > savedLastBackupSessions;
+    // Always consider backup needed when called directly after session end
+    if (activeSession && !activeSession.inProgress) {
+        return true;
+    }
+    
+    // Check if we have more sessions than last time we backed up
+    const savedLastBackupSessions = parseInt(localStorage.getItem(LAST_BACKUP_SESSIONS_KEY) || '0');
+    return sessions.length > savedLastBackupSessions;
 }
 // Try to automatically backup data if conditions are met
 async function tryAutoBackup() {
@@ -896,14 +901,11 @@ function endSessionHandler() {
     // Update history view
     updateHistoryView();
     
-    // If online, trigger backup immediately instead of checking auto-backup setting
+    // Trigger backup immediately when session ends (don't check auto-backup setting)
     if (navigator.onLine) {
-        console.log("Performing backup after session end");
-        backupToGitHub(true).then(() => {
-            console.log("Session end backup completed");
-        }).catch(error => {
-            console.error("Session end backup failed:", error);
-        });
+        backupToGitHub(true)
+            .then(() => console.log("Session end backup completed successfully"))
+            .catch(error => console.error("Session end backup failed:", error));
     }
     
     // Set active session to null after everything else is done
