@@ -210,7 +210,8 @@ margin: 10% auto;
 <h2>QR Code Scanner</h2>
 <div class="flex-between">
 <div class="button-group">
-<button id="startSessionBtn" class="button">Start Scanning Session</button>
+<button id="startSessionBtn" class="button">Start New Session</button>
+<button id="endSessionBtn" class="button" disabled>End Session</button>
 <button id="addManualEntryBtn" class="button button-secondary" style="display: none;">Add Manual Entry</button>
 </div>
 <div id="sessionInfo" style="display: none;">
@@ -299,21 +300,21 @@ margin: 10% auto;
 </div>
 </div>
 <div id="manualEntryModal" class="modal">
-  <div class="modal-content">
-    <span class="close" id="closeManualEntryBtn">&times;</span>
-    <h2>Enter Student ID Manually</h2>
-    <p>Please enter the student ID:</p>
-    <input type="text" id="manualIdInput" placeholder="e.g., S12345678">
-    <button id="confirmManualEntryBtn" class="button">Add Entry</button>
-  </div>
+<div class="modal-content">
+<span class="close" id="closeManualEntryBtn">&times;</span>
+<h2>Enter Student ID Manually</h2>
+<p>Please enter the student ID:</p>
+<input type="text" id="manualIdInput" placeholder="e.g., S12345678">
+<button id="confirmManualEntryBtn" class="button">Add Entry</button>
+</div>
 </div>
 <!-- Modal for Starting Session -->
 <div id="sessionModal" class="modal">
 <div class="modal-content">
-<span class="close">&times;</span>
+<span class="close" id="closeSessionBtn">&times;</span>  <!-- Added ID here -->
 <h2>Start New Scanning Session</h2>
 <p>Enter a location for this scanning session:</p>
-<input type="text" id="locationInput" placeholder="e.g., Warehouse A, Office Room 102">
+<input type="text" id="locationInput" placeholder="e.g., Morgue, Histology Lab, Biochemistry Lecture Hall">
 <p>This will help you identify and organize your scans.</p>
 <button id="confirmSessionBtn" class="button">Start Now</button>
 </div>
@@ -342,7 +343,7 @@ const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 const startSessionBtn = document.getElementById('startSessionBtn');
 const sessionModal = document.getElementById('sessionModal');
-const closeModalBtn = document.querySelector('.close');
+const closeSessionBtn = document.getElementById('closeSessionBtn');
 const confirmSessionBtn = document.getElementById('confirmSessionBtn');
 const locationInput = document.getElementById('locationInput');
 const currentLocation = document.getElementById('currentLocation');
@@ -764,6 +765,8 @@ loadGitHubToken();
 updateLastBackupTimeDisplay();
 // Setup manual entry functionality
 setupManualEntryButton();
+// Setup button event listeners
+setupButtonEventListeners();
 // Enable auto-backup by default
 if (localStorage.getItem(AUTO_BACKUP_ENABLED_KEY) === null) {
 localStorage.setItem(AUTO_BACKUP_ENABLED_KEY, 'true');
@@ -804,7 +807,7 @@ console.log("Initial auto-backup completed");
 // Add beforeunload event listener to prevent accidental closing during active session
 window.addEventListener('beforeunload', handleBeforeUnload);
 });
-//========================================================
+//================================================================================================================================
 // Load jsQR from local file
 function loadJsQR() {
 return new Promise((resolve, reject) => {
@@ -877,19 +880,16 @@ processManualEntry();
 }
 // Process manual entry
 function processManualEntry() {
-  const studentId = manualIdInput.value.trim();
-  
-  if (!studentId) {
-    alert('Please enter a Student ID');
-    return;
-  }
-
-  // Use studentId directly without additional info
-  processScannedCode(studentId, true);
-  
-  manualEntryModal.style.display = 'none';
-  updateScanStatus(`✅ Manual entry added: ${studentId.substring(0, 20)}${studentId.length > 20 ? '...' : ''}`);
-  addScanLogEntry(`Manual entry: ${studentId.substring(0, 15)}${studentId.length > 15 ? '...' : ''}`, 'success');
+const studentId = manualIdInput.value.trim();
+if (!studentId) {
+alert('Please enter a Student ID');
+return;
+}
+// Use studentId directly without additional info
+processScannedCode(studentId, true);
+manualEntryModal.style.display = 'none';
+updateScanStatus(`✅ Manual entry added: ${studentId.substring(0, 20)}${studentId.length > 20 ? '...' : ''}`);
+addScanLogEntry(`Manual entry: ${studentId.substring(0, 15)}${studentId.length > 15 ? '...' : ''}`, 'success');
 }
 // Process scanned QR code (modified to handle manual entries)
 function processScannedCode(data, isManual = false) {
@@ -940,6 +940,41 @@ playSuccessSound();
 }
 }
 //========================================================================================================== UI NAVIGATION & EVENT HANDLERS ========//
+// Set up button event listeners
+function setupButtonEventListeners() {
+// Start Session Button
+startSessionBtn.addEventListener('click', startSessionBtnHandler);
+// End Session Button - Make sure this is properly defined in DOM Elements
+const endSessionBtn = document.getElementById('endSessionBtn');
+if (endSessionBtn) {
+endSessionBtn.addEventListener('click', endSessionHandler);
+console.log("End session button handler attached");
+} else {
+console.error("End session button not found in the DOM");
+}
+// Update button states based on current session status
+updateButtonStates();
+}
+// Update button states based on active session
+function updateButtonStates() {
+if (activeSession) {
+// When a session is active
+if (startSessionBtn) startSessionBtn.disabled = true;
+const endSessionBtn = document.getElementById('endSessionBtn');
+if (endSessionBtn) endSessionBtn.disabled = false;
+const addManualEntryBtn = document.getElementById('addManualEntryBtn');
+if (addManualEntryBtn) addManualEntryBtn.style.display = 'inline-block';
+console.log("Buttons updated for active session");
+} else {
+// When no session is active
+if (startSessionBtn) startSessionBtn.disabled = false;
+const endSessionBtn = document.getElementById('endSessionBtn');
+if (endSessionBtn) endSessionBtn.disabled = true;
+const addManualEntryBtn = document.getElementById('addManualEntryBtn');
+if (addManualEntryBtn) addManualEntryBtn.style.display = 'none';
+console.log("Buttons updated for inactive session");
+}
+}
 tabs.forEach(tab => {
 tab.addEventListener('click', () => {
 const tabId = tab.getAttribute('data-tab');
@@ -961,25 +996,8 @@ backupBtn.addEventListener('click', () => backupToGitHub(false));
 if (saveTokenBtn) {
 saveTokenBtn.addEventListener('click', saveGitHubToken);
 }
-// Start Session Button
-startSessionBtn.addEventListener('click', () => {
-// Before showing the modal, verify if jsQR is loaded
-if (!jsQRLoaded) {
-loadJsQR()
-.then(() => {
-sessionModal.style.display = 'block';
-locationInput.focus();
-})
-.catch(() => {
-alert("Failed to load QR scanning library. Please check if jsQR.min.js is in the correct location and refresh the page.");
-});
-} else {
-sessionModal.style.display = 'block';
-locationInput.focus();
-}
-});
 // Close Modal
-closeModalBtn.addEventListener('click', () => {
+closeSessionBtn.addEventListener('click', () => {
 sessionModal.style.display = 'none';
 });
 // Start new scanning session
@@ -1012,8 +1030,6 @@ localStorage.setItem(TEMP_SESSION_INDEX_KEY, sessions.length - 1);
 currentLocation.textContent = location;
 currentDateTime.textContent = formattedDateTime;
 sessionInfo.style.display = 'block';
-// Show the manual entry button
-document.getElementById('addManualEntryBtn').style.display = 'inline-block';
 // Start camera
 startCamera();
 // Clear previous results
@@ -1026,10 +1042,8 @@ startAutoSave();
 saveSessionsToStorage();
 // Save the active session separately for recovery
 saveActiveSession();
-// Update button
-startSessionBtn.textContent = 'End Session';
-startSessionBtn.removeEventListener('click', startSessionBtnHandler);
-startSessionBtn.addEventListener('click', endSessionHandler);
+// Update button states
+updateButtonStates();
 // Update history view to show the new session
 updateHistoryView();
 });
@@ -1061,7 +1075,11 @@ autoSaveInterval = null;
 }
 // End session handler
 function endSessionHandler() {
-if (!activeSession) return;
+if (!activeSession) {
+console.log("No active session to end");
+return;
+}
+console.log("Ending session:", activeSession.id);
 // Confirm if there are no scans
 if (activeSession.scans.length === 0) {
 if (!confirm("No scans detected in this session. Do you still want to end it?")) {
@@ -1071,8 +1089,14 @@ return;
 // Stop scanner and auto-save
 stopScanner();
 stopAutoSave();
-// Mark session as completed
-activeSession.inProgress = false;
+// Mark session as completed in the sessions array
+const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+if (sessionIndex !== -1) {
+sessions[sessionIndex].inProgress = false;
+console.log("Session marked as completed:", activeSession.id);
+} else {
+console.warn("Could not find active session in sessions array");
+}
 // Save sessions to storage before clearing active session
 saveSessionsToStorage();
 // Clear active session storage since it's complete
@@ -1080,11 +1104,16 @@ localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
 localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
 // Update UI
 sessionInfo.style.display = 'none';
-startSessionBtn.textContent = 'Start New Session';
-startSessionBtn.removeEventListener('click', endSessionHandler);
-startSessionBtn.addEventListener('click', startSessionBtnHandler);
+resultTable.style.display = 'none';
+noScansMessage.style.display = 'none';
+// Show scanner placeholder
+scannerPlaceholder.style.display = 'block';
 // Hide manual entry button
 document.getElementById('addManualEntryBtn').style.display = 'none';
+// Set active session to null BEFORE updating button states
+activeSession = null;
+// Update button states
+updateButtonStates();
 // Update history view
 updateHistoryView();
 // If online, trigger backup immediately instead of checking auto-backup setting
@@ -1096,8 +1125,7 @@ console.log("Session end backup completed");
 console.error("Session end backup failed:", error);
 });
 }
-// Set active session to null after everything else is done
-activeSession = null;
+console.log("Session ended successfully");
 }
 // Start session button handler
 function startSessionBtnHandler() {
@@ -1162,6 +1190,35 @@ alert("Failed to start video playback. Please try again.");
 console.error("Camera access error:", error);
 alert(`Failed to access camera: ${error.message}. Please check camera permissions.`);
 }
+}
+// Stop the scanner and release camera resources
+function stopScanner() {
+console.log("Stopping scanner...");
+// Stop scanning loop
+scanning = false;
+// Stop the video stream if it exists
+if (videoStream) {
+videoStream.getTracks().forEach(track => {
+track.stop();
+console.log("Camera track stopped");
+});
+videoStream = null;
+}
+// Reset video element
+if (video) {
+video.srcObject = null;
+video.style.display = 'none';
+}
+// Show placeholder
+if (scannerPlaceholder) {
+scannerPlaceholder.style.display = 'block';
+}
+// Clear scanner UI elements
+const scannerUIElements = document.querySelectorAll('.scanner-ui');
+scannerUIElements.forEach(el => el.remove());
+// Reset scan status
+updateScanStatus('Scanner stopped');
+console.log("Scanner stopped successfully");
 }
 // Set up scanner UI elements
 function setupScannerUI() {
@@ -1407,7 +1464,7 @@ saveSessionsToStorage();
 addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}`, 'success');
 }
 // End current scanning session
-function endSessionHandler() {
+function stopScanner() {
 if (scanning) {
 scanning = false;
 // Stop auto-save
