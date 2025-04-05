@@ -1075,81 +1075,70 @@ autoSaveInterval = null;
 }
 // End session handler
 function endSessionHandler() {
-  if (!activeSession) {
-    console.log("No active session to end");
-    return;
-  }
-  console.log("Ending session:", activeSession.id);
-  
-  // Confirm if there are no scans
-  if (activeSession.scans.length === 0) {
-    if (!confirm("No scans detected in this session. Do you still want to end it?")) {
-      return;
-    }
-  }
-  
-  // Stop scanner and auto-save
-  stopScanner();
-  stopAutoSave();
-  
-  // Mark session as completed in the sessions array
-  const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
-  if (sessionIndex !== -1) {
-    sessions[sessionIndex].inProgress = false;
-    console.log("Session marked as completed:", activeSession.id);
-  } else {
-    console.warn("Could not find active session in sessions array");
-  }
-  
-  // Save sessions to storage before clearing active session
-  saveSessionsToStorage();
-  
-  // Clear active session storage since it's complete
-  localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
-  localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
-  
-  // Update UI - Make sure these are all properly reset
-  sessionInfo.style.display = 'none';
-  resultTable.style.display = 'none';
-  noScansMessage.style.display = 'none';
-  
-  // Clear result body
-  resultBody.innerHTML = '';
-  
-  // Show scanner placeholder
-  scannerPlaceholder.style.display = 'block';
-  
-  // Hide manual entry button
-  const addManualEntryBtn = document.getElementById('addManualEntryBtn');
-  if (addManualEntryBtn) {
-    addManualEntryBtn.style.display = 'none';
-  }
-  
-  // Set active session to null BEFORE updating button states
-  activeSession = null;
-  
-  // Explicitly update start session button state
-  if (startSessionBtn) {
-    startSessionBtn.disabled = false;
-  }
-  
-  // Update button states
-  updateButtonStates();
-  
-  // Update history view
-  updateHistoryView();
-  
-  // If online, trigger backup immediately instead of checking auto-backup setting
-  if (navigator.onLine) {
-    console.log("Performing backup after session end");
-    backupToGitHub(true).then(() => {
-      console.log("Session end backup completed");
-    }).catch(error => {
-      console.error("Session end backup failed:", error);
-    });
-  }
-  
-  console.log("Session ended successfully");
+if (!activeSession) {
+console.log("No active session to end");
+return;
+}
+console.log("Ending session:", activeSession.id);
+// Confirm if there are no scans
+if (activeSession.scans.length === 0) {
+if (!confirm("No scans detected in this session. Do you still want to end it?")) {
+return;
+}
+}
+// Use the renamed function to stop scanner and clean up camera
+stopScanner();
+stopAutoSave();
+// Mark session as completed in the sessions array
+const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+if (sessionIndex !== -1) {
+sessions[sessionIndex].inProgress = false;
+console.log("Session marked as completed:", activeSession.id);
+} else {
+console.warn("Could not find active session in sessions array");
+}
+// Save sessions to storage before clearing active session
+saveSessionsToStorage();
+// Clear active session storage since it's complete
+localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+localStorage.removeItem(TEMP_SESSION_INDEX_KEY);
+// Update UI - Reset all elements to pre-session state
+sessionInfo.style.display = 'none';
+// Explicitly hide the result table
+resultTable.style.display = 'none';
+// Clear result body and reset no scans message
+resultBody.innerHTML = '';
+noScansMessage.style.display = 'none';
+// Show scanner placeholder
+scannerPlaceholder.style.display = 'block';
+// Hide manual entry button
+const addManualEntryBtn = document.getElementById('addManualEntryBtn');
+if (addManualEntryBtn) {
+addManualEntryBtn.style.display = 'none';
+}
+// Clear active session BEFORE updating button states
+activeSession = null;
+// Update button states - specifically enable the start session button
+if (startSessionBtn) {
+startSessionBtn.disabled = false;
+// Make sure we're using the right event handler
+startSessionBtn.removeEventListener('click', endSessionHandler);
+startSessionBtn.addEventListener('click', startSessionBtnHandler);
+}
+// Update all other button states
+updateButtonStates();
+// Update history view
+updateHistoryView();
+// If online, trigger backup immediately instead of checking auto-backup setting
+if (navigator.onLine) {
+console.log("Performing backup after session end");
+backupToGitHub(true).then(() => {
+console.log("Session end backup completed");
+}).catch(error => {
+console.error("Session end backup failed:", error);
+});
+}
+console.log("Session ended successfully");
 }
 // Start session button handler
 function startSessionBtnHandler() {
@@ -1487,8 +1476,8 @@ saveSessionsToStorage();
 // Add to scan log
 addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}`, 'success');
 }
-// End current scanning session
-function stopScanner() {
+// End current scanning session - Renamed from stopScanner
+function endScanningSession() {
 if (scanning) {
 scanning = false;
 // Stop auto-save
