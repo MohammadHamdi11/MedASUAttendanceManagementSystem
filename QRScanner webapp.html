@@ -347,6 +347,7 @@ const saveTokenBtn = document.getElementById('saveTokenBtn');
 const tokenStatusMessage = document.getElementById('tokenStatusMessage');
 const autoBackupStatus = document.getElementById('autoBackupStatus');
 //======== APPLICATION STATE ========//
+let successSound = null;
 let activeSession = null;
 let canvasElement = document.createElement('canvas');
 let canvas = canvasElement.getContext('2d');
@@ -725,6 +726,7 @@ console.error('GitHub Excel export error:', error);
 //======== INITIALIZATION ========//
 // Check if jsQR is already loaded from the local file
 document.addEventListener('DOMContentLoaded', function() {
+preloadSuccessSound();
 console.log("DOM fully loaded");
 loadSessionsFromStorage();
 checkForRecoverableSession();
@@ -1734,10 +1736,40 @@ alert("Error exporting file: " + e.message);
 }
 }
 //======== HELPER FUNCTIONS ========//
-// Add placeholder for success sound function
+// Add sound effect when QR code is successfully scanned
+// Preload the success sound file
+function preloadSuccessSound() {
+try {
+successSound = new Audio('Barcode-scanner-beep-sound.mp3');
+// Preload the audio file
+successSound.load();
+console.log("Success sound preloaded");
+} catch (error) {
+console.error("Error preloading success sound:", error);
+}
+}
+// Play success sound when QR code is successfully scanned
 function playSuccessSound() {
-// Sound functionality could be added here
-// For now, we just have a placeholder to avoid errors
+try {
+if (successSound) {
+// Reset the audio to the beginning if it's already playing
+successSound.currentTime = 0;
+// Set volume (0.0 to 1.0)
+successSound.volume = 0.5;
+// Play the sound
+successSound.play().catch(error => {
+// This catches errors like autoplay being blocked
+console.warn("Could not play success sound:", error);
+});
+} else {
+// Fallback if preloading failed
+const audio = new Audio('Barcode-scanner-beep-sound.mp3');
+audio.volume = 0.5;
+audio.play().catch(err => console.warn("Could not play success sound:", err));
+}
+} catch (error) {
+console.error("Error playing success sound:", error);
+}
 }
 // Helper function to format date for display
 function formatDate(date) {
