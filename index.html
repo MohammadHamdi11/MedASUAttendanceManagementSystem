@@ -1089,11 +1089,13 @@ return;
 // Use the renamed function to stop scanner and clean up camera
 stopScanner();
 stopAutoSave();
+// Store the session ID before clearing the active session
+const sessionId = activeSession.id;
 // Mark session as completed in the sessions array
-const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+const sessionIndex = sessions.findIndex(s => s.id === sessionId);
 if (sessionIndex !== -1) {
 sessions[sessionIndex].inProgress = false;
-console.log("Session marked as completed:", activeSession.id);
+console.log("Session marked as completed:", sessionId);
 } else {
 console.warn("Could not find active session in sessions array");
 }
@@ -1129,6 +1131,8 @@ startSessionBtn.addEventListener('click', startSessionBtnHandler);
 updateButtonStates();
 // Update history view
 updateHistoryView();
+// Handle the export using our new dedicated function
+const exportSuccess = handleSessionExport(sessionId);
 // If online, trigger backup immediately instead of checking auto-backup setting
 if (navigator.onLine) {
 console.log("Performing backup after session end");
@@ -1476,7 +1480,7 @@ saveSessionsToStorage();
 // Add to scan log
 addScanLogEntry(`Saved: ${data.substring(0, 15)}${data.length > 15 ? '...' : ''}`, 'success');
 }
-// End current scanning session - Renamed from stopScanner
+// End current scanning session 
 function endScanningSession() {
 if (scanning) {
 scanning = false;
@@ -1493,8 +1497,10 @@ scannerPlaceholder.style.display = 'block';
 // Clean up UI elements
 const scannerUI = document.querySelectorAll('.scanner-ui');
 scannerUI.forEach(el => el.remove());
+// Store the session ID before potential changes
+const sessionId = activeSession.id;
 // Update session status in the array
-const sessionIndex = sessions.findIndex(s => s.id === activeSession.id);
+const sessionIndex = sessions.findIndex(s => s.id === sessionId);
 if (sessionIndex !== -1) {
 // Update the session to mark it as completed
 sessions[sessionIndex].inProgress = false;
@@ -1502,8 +1508,11 @@ sessions[sessionIndex].inProgress = false;
 saveSessionsToStorage();
 // Update history view
 updateHistoryView();
-// Auto-export this session
-exportSession(sessions[sessionIndex]);
+// Use the dedicated export function
+const exportSuccess = handleSessionExport(sessionId);
+if (exportSuccess) {
+console.log("Export completed for session:", sessionId);
+}
 }
 // Clear the active session storage
 clearActiveSession();
@@ -1839,6 +1848,32 @@ detailsBody.appendChild(row);
 sessionDetails.style.display = 'block';
 }
 //========================================================================================================== EXPORT FUNCTIONS ========//
+// Function to handle end-of-session export
+function handleSessionExport(sessionId) {
+console.log("Starting session export process for ID:", sessionId);
+// Find the session in the array
+const session = sessions.find(s => s.id === sessionId);
+if (!session) {
+console.error("Session not found for export:", sessionId);
+return false;
+}
+try {
+// Export the session to Excel
+console.log("Exporting session to Excel:", session.location);
+exportSession(session);
+// Trigger GitHub backup if online
+if (navigator.onLine) {
+console.log("Triggering GitHub backup after export");
+tryAutoBackup();
+}
+console.log("Session export completed successfully");
+return true;
+} catch (error) {
+console.error("Session export failed:", error);
+alert("Error exporting session: " + error.message);
+return false;
+}
+}
 // Export single session to Excel
 function exportSession(session) {
 if (!window.XLSX) {
