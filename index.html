@@ -1360,7 +1360,7 @@ statusEl.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';  // Default color
 }
 }
 }
-// Enhanced QR code scanning function with additional debugging
+// QR code scanning function 
 function scanQRCode() {
 if (!scanning) return;
 if (video.readyState === video.HAVE_ENOUGH_DATA) {
@@ -1400,6 +1400,8 @@ console.log("QR Code detected:", code.data);
 updateScanStatus(`✅ Successfully scanned: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`);
 // Highlight the QR code
 highlightQR(code.location);
+// Play success sound for ALL scans
+playSuccessSound();
 // Check if this code was recently scanned
 if (!lastScannedCodes.has(code.data)) {
 // Add to recent scans set and set timeout to remove
@@ -1409,8 +1411,6 @@ lastScannedCodes.delete(code.data);
 }, 3000); // Prevent duplicate scans for 3 seconds
 // Process the scanned code
 processScannedCode(code.data);
-// Play success sound
-playSuccessSound();
 } else {
 // Duplicate scan
 updateScanStatus(`Duplicate scan: ${code.data.substring(0, 20)}${code.data.length > 20 ? '...' : ''}`);
