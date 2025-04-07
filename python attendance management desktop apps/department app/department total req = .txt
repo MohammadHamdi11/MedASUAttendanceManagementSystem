@@ -1,0 +1,10 @@
+pharma=5
+infection=8
+blood=4
+respo=3
+cvs=5
+cns=8
+special s=1
+endocrine=2
+git=6
+uro=5
