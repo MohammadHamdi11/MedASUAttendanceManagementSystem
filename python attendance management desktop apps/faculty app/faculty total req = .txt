@@ -1,0 +1,2 @@
+histology module = 55
+all other = 10
